@@ -1,0 +1,22 @@
+[package]
+name = "slow-inference"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "slow_inference"
+path = "src/lib.rs"
+
+[[bin]]
+name = "slow-inference"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+
+[dependencies.ash]
+version = "0.37"
+features = ["loaded"]
+
+[dependencies.bitflags]
+version = "2"

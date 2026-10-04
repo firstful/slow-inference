@@ -1,0 +1,1513 @@
+{
+  "model": "/home/reeds/wide/qwen2.5-3b-f32.gguf",
+  "geometry": {
+    "arch": "qwen2",
+    "n_layer": 36,
+    "n_head": 16,
+    "n_head_kv": 2,
+    "n_rep": 8,
+    "mla": false,
+    "mha": false,
+    "single_kv_head": false,
+    "gqa_conventions_disagree": true,
+    "grouped_pairing": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "interleaved_pairing": [
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1
+    ],
+    "n_vocab": 151936
+  },
+  "llama_cpp": "/home/reeds/llama.cpp",
+  "llama_cpp_commit": "3653e6d",
+  "threads": "1",
+  "floor": "auto",
+  "topk": 10,
+  "builds": {
+    "engine_f32": {
+      "binary": "/tmp/opencode/t31/engine/target/release/slow-inference",
+      "model": "/home/reeds/wide/qwen2.5-3b-f32.gguf"
+    },
+    "engine_q4km": {
+      "binary": "/tmp/opencode/t31/engine/target/release/slow-inference",
+      "model": "models/qwen2.5-3b-instruct-q4_k_m.gguf"
+    },
+    "gqa_modulo": {
+      "binary": "/tmp/opencode/t31mut/target/release/slow-inference",
+      "model": "/home/reeds/wide/qwen2.5-3b-f32.gguf"
+    }
+  },
+  "cases": {
+    "capital": {
+      "tokens": [
+        785,
+        6722,
+        315,
+        9625,
+        374
+      ],
+      "builds": {
+        "engine_f32": {
+          "worst_rel_l2": 2.129423386089447e-05,
+          "worst_cosine": 0.9999999997954563,
+          "argmax_agreement": 5,
+          "n_positions": 5,
+          "within_floor": true,
+          "per_position": [
+            {
+              "rel_l2": 2.129423386089447e-05,
+              "cosine": 0.9999999997954563,
+              "argmax_engine": 2701,
+              "argmax_reference": 2701,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.17259893616456376,
+              "reference_top1_top2_margin": 0.1726000345533655
+            },
+            {
+              "rel_l2": 7.209577103867805e-06,
+              "cosine": 0.9999999999747763,
+              "argmax_engine": 315,
+              "argmax_reference": 315,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.08780582346828522,
+              "reference_top1_top2_margin": 0.08780448441325177
+            },
+            {
+              "rel_l2": 4.808434046035118e-06,
+              "cosine": 0.9999999999887008,
+              "argmax_engine": 279,
+              "argmax_reference": 279,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.09175077280444649,
+              "reference_top1_top2_margin": 0.09175075237931149
+            },
+            {
+              "rel_l2": 3.4464552439167932e-06,
+              "cosine": 0.9999999999940882,
+              "argmax_engine": 11,
+              "argmax_reference": 11,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.008638915735660965,
+              "reference_top1_top2_margin": 0.00863732709456317
+            },
+            {
+              "rel_l2": 3.6401338059689708e-06,
+              "cosine": 0.9999999999934012,
+              "argmax_engine": 12095,
+              "argmax_reference": 12095,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.11765931888708621,
+              "reference_top1_top2_margin": 0.11766020212757318
+            }
+          ],
+          "next_token_at_last_position": {
+            "reference": [
+              " Paris",
+              " a",
+              " __",
+              "____",
+              " located",
+              " ______",
+              " the",
+              " also",
+              " ____",
+              ":\\n"
+            ],
+            "reference_ids": [
+              12095,
+              264,
+              1304,
+              2130,
+              7407,
+              32671,
+              279,
+              1083,
+              30743,
+              510
+            ],
+            "engine": [
+              " Paris",
+              " a",
+              " __",
+              "____",
+              " located",
+              " ______",
+              " the",
+              " also",
+              " ____",
+              ":\\n"
+            ],
+            "engine_ids": [
+              12095,
+              264,
+              1304,
+              2130,
+              7407,
+              32671,
+              279,
+              1083,
+              30743,
+              510
+            ],
+            "top1_match": true,
+            "set_overlap": 1.0
+          }
+        },
+        "engine_q4km": {
+          "worst_rel_l2": 2.129423386089447e-05,
+          "worst_cosine": 0.9999999997954563,
+          "argmax_agreement": 5,
+          "n_positions": 5,
+          "within_floor": true,
+          "per_position": [
+            {
+              "rel_l2": 2.129423386089447e-05,
+              "cosine": 0.9999999997954563,
+              "argmax_engine": 2701,
+              "argmax_reference": 2701,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.17259893616456376,
+              "reference_top1_top2_margin": 0.1726000345533655
+            },
+            {
+              "rel_l2": 7.209577103867805e-06,
+              "cosine": 0.9999999999747763,
+              "argmax_engine": 315,
+              "argmax_reference": 315,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.08780582346828522,
+              "reference_top1_top2_margin": 0.08780448441325177
+            },
+            {
+              "rel_l2": 4.808434046035118e-06,
+              "cosine": 0.9999999999887008,
+              "argmax_engine": 279,
+              "argmax_reference": 279,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.09175077280444649,
+              "reference_top1_top2_margin": 0.09175075237931149
+            },
+            {
+              "rel_l2": 3.4464552439167932e-06,
+              "cosine": 0.9999999999940882,
+              "argmax_engine": 11,
+              "argmax_reference": 11,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.008638915735660965,
+              "reference_top1_top2_margin": 0.00863732709456317
+            },
+            {
+              "rel_l2": 3.6401338059689708e-06,
+              "cosine": 0.9999999999934012,
+              "argmax_engine": 12095,
+              "argmax_reference": 12095,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.11765931888708621,
+              "reference_top1_top2_margin": 0.11766020212757318
+            }
+          ],
+          "next_token_at_last_position": {
+            "reference": [
+              " Paris",
+              " a",
+              " __",
+              "____",
+              " located",
+              " ______",
+              " the",
+              " also",
+              " ____",
+              ":\\n"
+            ],
+            "reference_ids": [
+              12095,
+              264,
+              1304,
+              2130,
+              7407,
+              32671,
+              279,
+              1083,
+              30743,
+              510
+            ],
+            "engine": [
+              " Paris",
+              " a",
+              " __",
+              "____",
+              " located",
+              " ______",
+              " the",
+              " also",
+              " ____",
+              ":\\n"
+            ],
+            "engine_ids": [
+              12095,
+              264,
+              1304,
+              2130,
+              7407,
+              32671,
+              279,
+              1083,
+              30743,
+              510
+            ],
+            "top1_match": true,
+            "set_overlap": 1.0
+          }
+        },
+        "gqa_modulo": {
+          "worst_rel_l2": 1.9499635477280393,
+          "worst_cosine": -0.10542109604103814,
+          "argmax_agreement": 0,
+          "n_positions": 5,
+          "within_floor": false,
+          "per_position": [
+            {
+              "rel_l2": 1.2168455222433083,
+              "cosine": -0.10542109604103814,
+              "argmax_engine": 220,
+              "argmax_reference": 2701,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.0801523550130834,
+              "reference_top1_top2_margin": 0.1726000345533655
+            },
+            {
+              "rel_l2": 1.9499635477280393,
+              "cosine": 0.04036772246517416,
+              "argmax_engine": 64754,
+              "argmax_reference": 315,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.05275166946049018,
+              "reference_top1_top2_margin": 0.08780448441325177
+            },
+            {
+              "rel_l2": 1.0985602267104024,
+              "cosine": 0.16333985385947963,
+              "argmax_engine": 198,
+              "argmax_reference": 279,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.034032495078938824,
+              "reference_top1_top2_margin": 0.09175075237931149
+            },
+            {
+              "rel_l2": 1.6056083501677174,
+              "cosine": -0.08886355518211915,
+              "argmax_engine": 99741,
+              "argmax_reference": 11,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.04474847647501706,
+              "reference_top1_top2_margin": 0.00863732709456317
+            },
+            {
+              "rel_l2": 1.14584082514301,
+              "cosine": 0.3017402287843048,
+              "argmax_engine": 220,
+              "argmax_reference": 12095,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.06939014523253083,
+              "reference_top1_top2_margin": 0.11766020212757318
+            }
+          ],
+          "next_token_at_last_position": {
+            "reference": [
+              " Paris",
+              " a",
+              " __",
+              "____",
+              " located",
+              " ______",
+              " the",
+              " also",
+              " ____",
+              ":\\n"
+            ],
+            "reference_ids": [
+              12095,
+              264,
+              1304,
+              2130,
+              7407,
+              32671,
+              279,
+              1083,
+              30743,
+              510
+            ],
+            "engine": [
+              " ",
+              " and",
+              " $",
+              " cl",
+              " in",
+              "6",
+              "\\n",
+              "sp",
+              "2",
+              " pur"
+            ],
+            "engine_ids": [
+              220,
+              323,
+              400,
+              1185,
+              304,
+              21,
+              198,
+              2154,
+              17,
+              3999
+            ],
+            "top1_match": false,
+            "set_overlap": 0.0
+          }
+        }
+      },
+      "floor": 0.16213494726640584,
+      "pairwise": {
+        "engine_f32 vs engine_q4km": {
+          "n_positions": 5,
+          "worst_rel_l2": 0.0,
+          "worst_cosine": 1.0,
+          "argmax_agreement": 5,
+          "bit_identical_rows": 5,
+          "byte_identical": true,
+          "per_position": [
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0000000000000002,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0000000000000002,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0000000000000002,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            }
+          ]
+        },
+        "engine_f32 vs gqa_modulo": {
+          "n_positions": 5,
+          "worst_rel_l2": 2.0421053732989187,
+          "worst_cosine": -0.10542797502894986,
+          "argmax_agreement": 0,
+          "bit_identical_rows": 0,
+          "byte_identical": false,
+          "per_position": [
+            {
+              "rel_l2": 2.0421053732989187,
+              "cosine": -0.10542797502894986,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.1370843818588137,
+              "cosine": 0.04037025073422626,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.6990487251126538,
+              "cosine": 0.16334027185798922,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.3717851528157812,
+              "cosine": -0.08886321700203217,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.222427630912487,
+              "cosine": 0.30173962924709197,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            }
+          ]
+        },
+        "engine_q4km vs gqa_modulo": {
+          "n_positions": 5,
+          "worst_rel_l2": 2.0421053732989187,
+          "worst_cosine": -0.10542797502894986,
+          "argmax_agreement": 0,
+          "bit_identical_rows": 0,
+          "byte_identical": false,
+          "per_position": [
+            {
+              "rel_l2": 2.0421053732989187,
+              "cosine": -0.10542797502894986,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.1370843818588137,
+              "cosine": 0.04037025073422626,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.6990487251126538,
+              "cosine": 0.16334027185798922,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.3717851528157812,
+              "cosine": -0.08886321700203217,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.222427630912487,
+              "cosine": 0.30173962924709197,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            }
+          ]
+        }
+      },
+      "reference_self_sensitivity": {
+        "reference_model": "/home/reeds/wide/qwen2.5-3b-f32.gguf",
+        "other_weight_file": "models/qwen2.5-3b-instruct-q4_k_m.gguf",
+        "note": "llama.cpp vs llama.cpp, identical tokens and precision settings; the only difference is how the weights are stored. An engine-vs-llama.cpp gap at or below this is the reference's own noise, not a semantic disagreement.",
+        "worst_rel_l2": 0.08106747363320292,
+        "worst_cosine": 0.9967100475142491,
+        "argmax_agreement": 4,
+        "n_positions": 5,
+        "per_position": [
+          {
+            "rel_l2": 0.0666996583907433,
+            "cosine": 0.9977900775568138,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.05762764224300583,
+            "cosine": 0.9983596632095351,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.08106747363320292,
+            "cosine": 0.9967100475142491,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.043825327890711405,
+            "cosine": 0.9990401311338606,
+            "argmax_match": false
+          },
+          {
+            "rel_l2": 0.04982367490661337,
+            "cosine": 0.9987820197682937,
+            "argmax_match": true
+          }
+        ]
+      }
+    },
+    "moon": {
+      "tokens": [
+        641,
+        220,
+        16,
+        24,
+        21,
+        24,
+        11,
+        12677,
+        1156,
+        26120,
+        389,
+        279
+      ],
+      "builds": {
+        "engine_f32": {
+          "worst_rel_l2": 0.00024534920927748386,
+          "worst_cosine": 0.999999969909818,
+          "argmax_agreement": 12,
+          "n_positions": 12,
+          "within_floor": true,
+          "per_position": [
+            {
+              "rel_l2": 4.4496207005245345e-05,
+              "cosine": 0.9999999990104276,
+              "argmax_engine": 264,
+              "argmax_reference": 264,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.038224040550274535,
+              "reference_top1_top2_margin": 0.03822445121962022
+            },
+            {
+              "rel_l2": 6.158348162395601e-06,
+              "cosine": 0.9999999999817141,
+              "argmax_engine": 16,
+              "argmax_reference": 16,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.005336892377412657,
+              "reference_top1_top2_margin": 0.0053367160709718794
+            },
+            {
+              "rel_l2": 0.00024534920927748386,
+              "cosine": 0.999999969909818,
+              "argmax_engine": 24,
+              "argmax_reference": 24,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.07582737877738872,
+              "reference_top1_top2_margin": 0.07581905247535409
+            },
+            {
+              "rel_l2": 1.248556358712723e-05,
+              "cosine": 0.9999999999289603,
+              "argmax_engine": 24,
+              "argmax_reference": 24,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.02608660762478656,
+              "reference_top1_top2_margin": 0.026085011130379324
+            },
+            {
+              "rel_l2": 1.4122352480158515e-05,
+              "cosine": 0.9999999999090252,
+              "argmax_engine": 15,
+              "argmax_reference": 15,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.012547193974147445,
+              "reference_top1_top2_margin": 0.012547829492472897
+            },
+            {
+              "rel_l2": 1.1581340758925781e-05,
+              "cosine": 0.9999999999375083,
+              "argmax_engine": 11,
+              "argmax_reference": 11,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.18492215141941676,
+              "reference_top1_top2_margin": 0.1849219059217537
+            },
+            {
+              "rel_l2": 6.422335219801623e-06,
+              "cosine": 0.9999999999794132,
+              "argmax_engine": 279,
+              "argmax_reference": 279,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.04732628964697106,
+              "reference_top1_top2_margin": 0.04732755146079834
+            },
+            {
+              "rel_l2": 1.1277716313182115e-05,
+              "cosine": 0.9999999999372597,
+              "argmax_engine": 1156,
+              "argmax_reference": 1156,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.039568721091799215,
+              "reference_top1_top2_margin": 0.03956655229899267
+            },
+            {
+              "rel_l2": 8.765799672507879e-06,
+              "cosine": 0.9999999999626463,
+              "argmax_engine": 738,
+              "argmax_reference": 738,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.0022245324403565776,
+              "reference_top1_top2_margin": 0.002225837493711344
+            },
+            {
+              "rel_l2": 8.161888737800479e-06,
+              "cosine": 0.9999999999667631,
+              "argmax_engine": 389,
+              "argmax_reference": 389,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.2073574058560877,
+              "reference_top1_top2_margin": 0.20735661945287853
+            },
+            {
+              "rel_l2": 6.284287079568184e-06,
+              "cosine": 0.9999999999806992,
+              "argmax_engine": 279,
+              "argmax_reference": 279,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.22609543212544186,
+              "reference_top1_top2_margin": 0.22609447637731994
+            },
+            {
+              "rel_l2": 6.081915601211134e-06,
+              "cosine": 0.9999999999815069,
+              "argmax_engine": 17788,
+              "argmax_reference": 17788,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.09717725558367903,
+              "reference_top1_top2_margin": 0.09717745955762491
+            }
+          ],
+          "next_token_at_last_position": {
+            "reference": [
+              " moon",
+              " Moon",
+              " surface",
+              " lunar",
+              " Earth",
+              " planet",
+              " ______",
+              " ___",
+              " _____",
+              " earth"
+            ],
+            "reference_ids": [
+              17788,
+              17330,
+              7329,
+              56711,
+              9237,
+              11580,
+              32671,
+              7436,
+              65892,
+              9393
+            ],
+            "engine": [
+              " moon",
+              " Moon",
+              " surface",
+              " lunar",
+              " Earth",
+              " planet",
+              " ______",
+              " ___",
+              " _____",
+              " earth"
+            ],
+            "engine_ids": [
+              17788,
+              17330,
+              7329,
+              56711,
+              9237,
+              11580,
+              32671,
+              7436,
+              65892,
+              9393
+            ],
+            "top1_match": true,
+            "set_overlap": 1.0
+          }
+        },
+        "engine_q4km": {
+          "worst_rel_l2": 0.00024534920927748386,
+          "worst_cosine": 0.999999969909818,
+          "argmax_agreement": 12,
+          "n_positions": 12,
+          "within_floor": true,
+          "per_position": [
+            {
+              "rel_l2": 4.4496207005245345e-05,
+              "cosine": 0.9999999990104276,
+              "argmax_engine": 264,
+              "argmax_reference": 264,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.038224040550274535,
+              "reference_top1_top2_margin": 0.03822445121962022
+            },
+            {
+              "rel_l2": 6.158348162395601e-06,
+              "cosine": 0.9999999999817141,
+              "argmax_engine": 16,
+              "argmax_reference": 16,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.005336892377412657,
+              "reference_top1_top2_margin": 0.0053367160709718794
+            },
+            {
+              "rel_l2": 0.00024534920927748386,
+              "cosine": 0.999999969909818,
+              "argmax_engine": 24,
+              "argmax_reference": 24,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.07582737877738872,
+              "reference_top1_top2_margin": 0.07581905247535409
+            },
+            {
+              "rel_l2": 1.248556358712723e-05,
+              "cosine": 0.9999999999289603,
+              "argmax_engine": 24,
+              "argmax_reference": 24,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.02608660762478656,
+              "reference_top1_top2_margin": 0.026085011130379324
+            },
+            {
+              "rel_l2": 1.4122352480158515e-05,
+              "cosine": 0.9999999999090252,
+              "argmax_engine": 15,
+              "argmax_reference": 15,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.012547193974147445,
+              "reference_top1_top2_margin": 0.012547829492472897
+            },
+            {
+              "rel_l2": 1.1581340758925781e-05,
+              "cosine": 0.9999999999375083,
+              "argmax_engine": 11,
+              "argmax_reference": 11,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.18492215141941676,
+              "reference_top1_top2_margin": 0.1849219059217537
+            },
+            {
+              "rel_l2": 6.422335219801623e-06,
+              "cosine": 0.9999999999794132,
+              "argmax_engine": 279,
+              "argmax_reference": 279,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.04732628964697106,
+              "reference_top1_top2_margin": 0.04732755146079834
+            },
+            {
+              "rel_l2": 1.1277716313182115e-05,
+              "cosine": 0.9999999999372597,
+              "argmax_engine": 1156,
+              "argmax_reference": 1156,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.039568721091799215,
+              "reference_top1_top2_margin": 0.03956655229899267
+            },
+            {
+              "rel_l2": 8.765799672507879e-06,
+              "cosine": 0.9999999999626463,
+              "argmax_engine": 738,
+              "argmax_reference": 738,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.0022245324403565776,
+              "reference_top1_top2_margin": 0.002225837493711344
+            },
+            {
+              "rel_l2": 8.161888737800479e-06,
+              "cosine": 0.9999999999667631,
+              "argmax_engine": 389,
+              "argmax_reference": 389,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.2073574058560877,
+              "reference_top1_top2_margin": 0.20735661945287853
+            },
+            {
+              "rel_l2": 6.284287079568184e-06,
+              "cosine": 0.9999999999806992,
+              "argmax_engine": 279,
+              "argmax_reference": 279,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.22609543212544186,
+              "reference_top1_top2_margin": 0.22609447637731994
+            },
+            {
+              "rel_l2": 6.081915601211134e-06,
+              "cosine": 0.9999999999815069,
+              "argmax_engine": 17788,
+              "argmax_reference": 17788,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.09717725558367903,
+              "reference_top1_top2_margin": 0.09717745955762491
+            }
+          ],
+          "next_token_at_last_position": {
+            "reference": [
+              " moon",
+              " Moon",
+              " surface",
+              " lunar",
+              " Earth",
+              " planet",
+              " ______",
+              " ___",
+              " _____",
+              " earth"
+            ],
+            "reference_ids": [
+              17788,
+              17330,
+              7329,
+              56711,
+              9237,
+              11580,
+              32671,
+              7436,
+              65892,
+              9393
+            ],
+            "engine": [
+              " moon",
+              " Moon",
+              " surface",
+              " lunar",
+              " Earth",
+              " planet",
+              " ______",
+              " ___",
+              " _____",
+              " earth"
+            ],
+            "engine_ids": [
+              17788,
+              17330,
+              7329,
+              56711,
+              9237,
+              11580,
+              32671,
+              7436,
+              65892,
+              9393
+            ],
+            "top1_match": true,
+            "set_overlap": 1.0
+          }
+        },
+        "gqa_modulo": {
+          "worst_rel_l2": 2.0256786422486726,
+          "worst_cosine": -0.27348648576862833,
+          "argmax_agreement": 1,
+          "n_positions": 12,
+          "within_floor": false,
+          "per_position": [
+            {
+              "rel_l2": 1.3871851086446587,
+              "cosine": -0.27348648576862833,
+              "argmax_engine": 220,
+              "argmax_reference": 264,
+              "argmax_match": false,
+              "top10_overlap": 0.1,
+              "engine_top1_top2_margin": 0.043875572325022955,
+              "reference_top1_top2_margin": 0.03822445121962022
+            },
+            {
+              "rel_l2": 1.0830533101566087,
+              "cosine": 0.21565122840148568,
+              "argmax_engine": 77,
+              "argmax_reference": 16,
+              "argmax_match": false,
+              "top10_overlap": 0.1,
+              "engine_top1_top2_margin": 0.0032940536860193172,
+              "reference_top1_top2_margin": 0.0053367160709718794
+            },
+            {
+              "rel_l2": 1.2395500483675443,
+              "cosine": 0.4346097327740357,
+              "argmax_engine": 220,
+              "argmax_reference": 24,
+              "argmax_match": false,
+              "top10_overlap": 0.1,
+              "engine_top1_top2_margin": 0.02466179170385054,
+              "reference_top1_top2_margin": 0.07581905247535409
+            },
+            {
+              "rel_l2": 2.0256786422486726,
+              "cosine": 0.3024566444260578,
+              "argmax_engine": 70467,
+              "argmax_reference": 24,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.005490402677501747,
+              "reference_top1_top2_margin": 0.026085011130379324
+            },
+            {
+              "rel_l2": 1.1721163805561454,
+              "cosine": 0.5279242023974933,
+              "argmax_engine": 15,
+              "argmax_reference": 15,
+              "argmax_match": true,
+              "top10_overlap": 0.3,
+              "engine_top1_top2_margin": 0.11652670293949825,
+              "reference_top1_top2_margin": 0.012547829492472897
+            },
+            {
+              "rel_l2": 1.8370915159182204,
+              "cosine": -0.2382030973415847,
+              "argmax_engine": 79,
+              "argmax_reference": 11,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.046545951950370396,
+              "reference_top1_top2_margin": 0.1849219059217537
+            },
+            {
+              "rel_l2": 1.3528934001701531,
+              "cosine": -0.11122278670661832,
+              "argmax_engine": 220,
+              "argmax_reference": 279,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.04247106724915438,
+              "reference_top1_top2_margin": 0.04732755146079834
+            },
+            {
+              "rel_l2": 1.6270640668900922,
+              "cosine": 0.2843115570223066,
+              "argmax_engine": 99621,
+              "argmax_reference": 1156,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.04960521540722562,
+              "reference_top1_top2_margin": 0.03956655229899267
+            },
+            {
+              "rel_l2": 1.1007914888951222,
+              "cosine": 0.48748714432623236,
+              "argmax_engine": 71600,
+              "argmax_reference": 738,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.06873646330143528,
+              "reference_top1_top2_margin": 0.002225837493711344
+            },
+            {
+              "rel_l2": 1.3512668758412858,
+              "cosine": 0.3482916907198266,
+              "argmax_engine": 220,
+              "argmax_reference": 389,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.2650375345415666,
+              "reference_top1_top2_margin": 0.20735661945287853
+            },
+            {
+              "rel_l2": 1.058576790838947,
+              "cosine": 0.4391613372596376,
+              "argmax_engine": 85,
+              "argmax_reference": 279,
+              "argmax_match": false,
+              "top10_overlap": 0.1,
+              "engine_top1_top2_margin": 0.05439718736577916,
+              "reference_top1_top2_margin": 0.22609447637731994
+            },
+            {
+              "rel_l2": 1.051939434875258,
+              "cosine": 0.42246886661702376,
+              "argmax_engine": 3355,
+              "argmax_reference": 17788,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.0029573621001105417,
+              "reference_top1_top2_margin": 0.09717745955762491
+            }
+          ],
+          "next_token_at_last_position": {
+            "reference": [
+              " moon",
+              " Moon",
+              " surface",
+              " lunar",
+              " Earth",
+              " planet",
+              " ______",
+              " ___",
+              " _____",
+              " earth"
+            ],
+            "reference_ids": [
+              17788,
+              17330,
+              7329,
+              56711,
+              9237,
+              11580,
+              32671,
+              7436,
+              65892,
+              9393
+            ],
+            "engine": [
+              " ''",
+              "\"",
+              "''",
+              "\"\"",
+              " <",
+              " ",
+              "1",
+              " \\n",
+              " \\n\\n",
+              "  "
+            ],
+            "engine_ids": [
+              3355,
+              1,
+              4605,
+              3014,
+              366,
+              220,
+              16,
+              715,
+              4710,
+              256
+            ],
+            "top1_match": false,
+            "set_overlap": 0.0
+          }
+        }
+      },
+      "floor": 0.2585114189762598,
+      "pairwise": {
+        "engine_f32 vs engine_q4km": {
+          "n_positions": 12,
+          "worst_rel_l2": 0.0,
+          "worst_cosine": 0.9999999999999998,
+          "argmax_agreement": 12,
+          "bit_identical_rows": 12,
+          "byte_identical": true,
+          "per_position": [
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 0.9999999999999999,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0000000000000002,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0000000000000002,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 0.9999999999999998,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0000000000000002,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            },
+            {
+              "rel_l2": 0.0,
+              "cosine": 1.0,
+              "argmax_match": true,
+              "rows_bit_identical": true
+            }
+          ]
+        },
+        "engine_f32 vs gqa_modulo": {
+          "n_positions": 12,
+          "worst_rel_l2": 1.9105864519127933,
+          "worst_cosine": -0.2734883055473162,
+          "argmax_agreement": 1,
+          "bit_identical_rows": 0,
+          "byte_identical": false,
+          "per_position": [
+            {
+              "rel_l2": 1.9105864519127933,
+              "cosine": -0.2734883055473162,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.5830190439912109,
+              "cosine": 0.21565113476723732,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 0.9636777471402841,
+              "cosine": 0.4345842317517487,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 0.9692849153181643,
+              "cosine": 0.30245453432849717,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 0.8775065760835707,
+              "cosine": 0.527924057164822,
+              "argmax_match": true,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.390505144386903,
+              "cosine": -0.23820402813316016,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.6769481901915584,
+              "cosine": -0.11122259752799483,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.0176100371345977,
+              "cosine": 0.2843076846867527,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 0.9507212040963474,
+              "cosine": 0.487486089415013,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.022487515035415,
+              "cosine": 0.3482916344675934,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.0596103904230447,
+              "cosine": 0.43916117685328554,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.0999233466025278,
+              "cosine": 0.4224682796376776,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            }
+          ]
+        },
+        "engine_q4km vs gqa_modulo": {
+          "n_positions": 12,
+          "worst_rel_l2": 1.9105864519127933,
+          "worst_cosine": -0.2734883055473162,
+          "argmax_agreement": 1,
+          "bit_identical_rows": 0,
+          "byte_identical": false,
+          "per_position": [
+            {
+              "rel_l2": 1.9105864519127933,
+              "cosine": -0.2734883055473162,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.5830190439912109,
+              "cosine": 0.21565113476723732,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 0.9636777471402841,
+              "cosine": 0.4345842317517487,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 0.9692849153181643,
+              "cosine": 0.30245453432849717,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 0.8775065760835707,
+              "cosine": 0.527924057164822,
+              "argmax_match": true,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.390505144386903,
+              "cosine": -0.23820402813316016,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.6769481901915584,
+              "cosine": -0.11122259752799483,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.0176100371345977,
+              "cosine": 0.2843076846867527,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 0.9507212040963474,
+              "cosine": 0.487486089415013,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.022487515035415,
+              "cosine": 0.3482916344675934,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.0596103904230447,
+              "cosine": 0.43916117685328554,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            },
+            {
+              "rel_l2": 1.0999233466025278,
+              "cosine": 0.4224682796376776,
+              "argmax_match": false,
+              "rows_bit_identical": false
+            }
+          ]
+        }
+      },
+      "reference_self_sensitivity": {
+        "reference_model": "/home/reeds/wide/qwen2.5-3b-f32.gguf",
+        "other_weight_file": "models/qwen2.5-3b-instruct-q4_k_m.gguf",
+        "note": "llama.cpp vs llama.cpp, identical tokens and precision settings; the only difference is how the weights are stored. An engine-vs-llama.cpp gap at or below this is the reference's own noise, not a semantic disagreement.",
+        "worst_rel_l2": 0.1292557094881299,
+        "worst_cosine": 0.9916267240224739,
+        "argmax_agreement": 12,
+        "n_positions": 12,
+        "per_position": [
+          {
+            "rel_l2": 0.1292557094881299,
+            "cosine": 0.9916267240224739,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.04952337244822861,
+            "cosine": 0.9987856849282917,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.12860396147731243,
+            "cosine": 0.9917178183635853,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.047523954245791256,
+            "cosine": 0.9989018700571162,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.03694361289828046,
+            "cosine": 0.9993386596613664,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.04363055126832871,
+            "cosine": 0.9990497211852023,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.05096722446948285,
+            "cosine": 0.9987123332413649,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.041195874838217454,
+            "cosine": 0.9991511228018217,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.03685545562879367,
+            "cosine": 0.9993392593126347,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.0444454341014388,
+            "cosine": 0.9990801691210258,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.03870490084205314,
+            "cosine": 0.9992606887421129,
+            "argmax_match": true
+          },
+          {
+            "rel_l2": 0.039504164580529626,
+            "cosine": 0.9992557776669039,
+            "argmax_match": true
+          }
+        ]
+      }
+    }
+  },
+  "separation": {
+    "capital": {
+      "closest_build": "engine_f32",
+      "closest_worst_rel_l2": 2.129423386089447e-05,
+      "furthest_build": "gqa_modulo",
+      "furthest_worst_rel_l2": 1.9499635477280393,
+      "ratio": 91572.37402699073,
+      "floor": 0.16213494726640584,
+      "floor_measured": true,
+      "floor_margin_of_closest": 7614.030555199102
+    },
+    "moon": {
+      "closest_build": "engine_f32",
+      "closest_worst_rel_l2": 0.00024534920927748386,
+      "furthest_build": "gqa_modulo",
+      "furthest_worst_rel_l2": 2.0256786422486726,
+      "ratio": 8256.308011808916,
+      "floor": 0.2585114189762598,
+      "floor_measured": true,
+      "floor_margin_of_closest": 1053.6468396924392
+    }
+  },
+  "engine_bin_md5": {
+    "engine_f32/engine_q4km": "5af165b52abf5d24bc5f3bbac97c1e1d (src/model.rs, t31 snapshot)",
+    "gqa_modulo": "787dbfb078cb64337c16ae301f61ed4d (src/model.rs, tick-28 pairing, 7 sites)"
+  },
+  "widening": {
+    "tool": "scripts/requantize.py --to f32",
+    "dequantizer": "gguf-py quantizes.dequantize (ggml's own dequantize_row_*, an implementation independent of the engine's src/quant.rs)",
+    "source": "models/qwen2.5-3b-instruct-q4_k_m.gguf",
+    "output_bytes": 13594370496,
+    "tensors_converted": 435,
+    "elements": 3397103616,
+    "log": "results/f32_widen_qwen2.5-3b.log",
+    "why_it_was_considered_blocked": "the output is 12.4 GB and /tmp is a 7.8 GB tmpfs; gguf-py's SpooledTemporaryFile honours $TMPDIR, so the spill was RAM again. It needed 12.4 GB of DISK and ~1.5 GB of RAM, not 12.4 GB of RAM."
+  },
+  "attribution": {
+    "claim": "the real-model engine-vs-llama.cpp gap on this Q4_K_M file is llama.cpp's own sensitivity to 4-bit weight storage, not a semantic disagreement",
+    "why_it_follows": "engine(Q4_K_M) and engine(F32) are bit-identical, so engine(Q4_K_M) - llama(Q4_K_M) == llama(F32) - llama(Q4_K_M) exactly; both sides of that identity were measured",
+    "capital_per_position_rel_l2": {
+      "engine_q4km_minus_llama_q4km_tick30": [
+        0.066699,
+        0.057628,
+        0.081067,
+        0.043826,
+        0.049824
+      ],
+      "llama_f32_minus_llama_q4km_this_tick": [
+        0.0667,
+        0.057628,
+        0.081067,
+        0.043825,
+        0.049824
+      ]
+    },
+    "argmax": "the one argmax disagreement (capital position 3, token 11 against 374) is at the same position where llama.cpp disagrees with ITSELF between F32 and Q4_K_M, and llama.cpp's own top1/top2 margin there is 1.5e-3 \u2014 a near-tie that 4-bit storage reorders"
+  }
+}

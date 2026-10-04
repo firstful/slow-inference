@@ -1,0 +1,1802 @@
+//! Disk-streaming layer-by-layer forward pass for llama-arch GGUF models.
+//! Supports MHA, GQA, MoE, bias, and dense FFN paths.
+//! DISCIPLINE: no tensor is ever fully resident. Weight rows are seek()+read()
+//! +dequant() at use time in <=256 KiB chunks. Only these live in RAM:
+//!   - GGUF header/tensor dir (KBs)
+//!   - KV cache (layers x seq x embd f32)
+//!   - activation vectors for the current token
+//!   - the current row-chunk being multiplied (<=256 KiB)
+use crate::gguf::{GGUFFile, TensorInfo, parse};
+use crate::quant::read_rows_streamed;
+use std::fs::File;
+use std::io::{self};
+fn f16_to_f32(bits: u16) -> f32 {
+    let sign = ((bits & 0x8000) as u32) << 16;
+    let exp = ((bits & 0x7C00) >> 10) as u32;
+    let frac = (bits & 0x03FF) as u32;
+    let out = if exp == 0 {
+        (frac as f32 * (1.0 / 8388608.0) * 2f32.powi(-14)).to_bits()
+    } else if exp == 31 {
+        if frac == 0 {
+            0x7F80_0000
+        } else {
+            0x7FC0_0000 | frac
+        }
+    } else {
+        ((exp - 15 + 127) << 23) | (frac << 13)
+    };
+    f32::from_bits(sign | out)
+}
+// ---- Architecture dispatch ----
+/// Supported architecture variants. Each wraps the architecture's tensor
+/// naming convention and parameter defaults.
+///
+/// Tier 1 archs (Qwen2, Gemma2, etc.) share the llama tensor layout exactly
+/// — only the `general.architecture` key differs. They use the same
+/// `tensor_name()` patterns as `Llama`.
+///
+/// `from_string()` maps a GGUF architecture string to the variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArchVariant {
+    Llama,
+    // Tier 1 — same tensor layout as Llama, different arch key
+    Qwen2,
+    Gemma2,
+    Gemma, // gemma (original)
+    CodeShell,
+    Orion,
+    InternLM2,
+    StableLM,
+    Xverse,
+    PLamo,
+    Baichuan,
+    Olmo,
+    Smollm3,
+    OpenELM,
+    Nemotron,
+    // Tier 2 — tensor layout variants
+    Phi3,
+    GPT2,
+    Falcon,
+    // Tier 3 — attention changes
+    DeepSeek2,
+    K2Horizon,
+    Gemma3,
+}
+/// Lookup from GGUF `general.architecture` string → ArchVariant.
+pub fn arch_from_string(s: &str) -> ArchVariant {
+    match s {
+        "llama" | "llama4" | "laguna" | "deci" | "grok" => ArchVariant::Llama,
+        "qwen2" | "qwen2moe" => ArchVariant::Qwen2,
+        "gemma2" => ArchVariant::Gemma2,
+        "gemma" => ArchVariant::Gemma,
+        "codeshell" => ArchVariant::CodeShell,
+        "orion" => ArchVariant::Orion,
+        "internlm2" => ArchVariant::InternLM2,
+        "stablelm" => ArchVariant::StableLM,
+        "xverse" => ArchVariant::Xverse,
+        "plamo" | "plamo2" => ArchVariant::PLamo,
+        "baichuan" => ArchVariant::Baichuan,
+        "olmo" | "olmo2" => ArchVariant::Olmo,
+        "smollm3" => ArchVariant::Smollm3,
+        "openelm" => ArchVariant::OpenELM,
+        "nemotron" | "nemotron_h" | "nemotron_h_moe" => ArchVariant::Nemotron,
+        "phi3" | "phimoe" => ArchVariant::Phi3,
+        "gpt2" => ArchVariant::GPT2,
+        "falcon" | "falcon-h1" => ArchVariant::Falcon,
+        "deepseek2" => ArchVariant::DeepSeek2,
+        "gemma3" | "gemma3n" => ArchVariant::Gemma3,
+        "k2_horizon" => ArchVariant::K2Horizon,
+        _ => {
+            eprintln!("[model] unknown architecture \"{s}\", treating as llama");
+            ArchVariant::Llama
+        }
+    }
+}
+// ---- Tensor name dispatch ----
+/// Tensor kinds used by the forward pass.
+#[derive(Debug, Clone, Copy)]
+pub enum TensorKind {
+    TokenEmbedd,
+    Output,
+    AttnNorm,
+    AttnQ,
+    AttnK,
+    AttnV,
+    AttnQKNorm, // qk-norm weight name (same for Q and K)
+    AttnQBias,
+    AttnKBias,
+    AttnVBias,
+    AttnQKVBias, // fused QKV bias (GPT-2 c_attn.bias)
+    AttnOutput,
+    AttnOutputBias,
+    FfnNorm,
+    FfnUp,
+    FfnGate,
+    FfnDown,
+    FfnGateInp,  // MoE router
+    FfnUpExps,   // MoE expert up
+    FfnGateExps, // MoE expert gate
+    FfnDownExps, // MoE expert down
+    OutputNorm,
+    PositionEmbedd, // learned positional embeddings (GPT-2, etc.)
+    AttnNormBias,   // attention norm bias
+    FfnNormBias,    // FFN norm bias
+    FfnUpBias,      // FFN up bias
+    FfnDownBias,    // FFN down bias
+    OutputNormBias, // final norm bias
+    // DeepSeek-V2 MLA specific
+    AttnQANorm,   // attn_q_a_norm.weight
+    AttnQA,       // attn_q_a.weight
+    AttnQB,       // attn_q_b.weight
+    AttnKVAMQA,   // attn_kv_a_mqa.weight
+    AttnKVANorm,  // attn_kv_a_norm.weight
+    AttnKB,       // attn_k_b.weight
+    AttnVB,       // attn_v_b.weight
+    FfnGateShexp, // ffn_gate_shexp.weight
+    FfnUpShexp,   // ffn_up_shexp.weight
+    FfnDownShexp, // ffn_down_shexp.weight
+    FfnExpProbsB, // exp_probs_b.bias (optional)
+}
+/// Format a tensor name for the given architecture and layer/bias.
+/// For Tier 1 architectures, tensor names match llama exactly.
+pub fn tensor_name(arch: ArchVariant, kind: TensorKind, layer: usize) -> String {
+    match arch {
+        // Tier 0/1 — llama tensor names (also used by Qwen2, Gemma2, etc.)
+        ArchVariant::Llama
+        | ArchVariant::Qwen2
+        | ArchVariant::Gemma2
+        | ArchVariant::Gemma
+        | ArchVariant::CodeShell
+        | ArchVariant::Orion
+        | ArchVariant::InternLM2
+        | ArchVariant::StableLM
+        | ArchVariant::Xverse
+        | ArchVariant::PLamo
+        | ArchVariant::Baichuan
+        | ArchVariant::Olmo
+        | ArchVariant::Smollm3
+        | ArchVariant::OpenELM
+        | ArchVariant::Nemotron => llama_tensor_name(kind, layer),
+        // Tier 2 — tensor name variants
+        ArchVariant::Phi3 => phi3_tensor_name(kind, layer),
+        ArchVariant::GPT2 => gpt2_tensor_name(kind, layer),
+        ArchVariant::Falcon => falcon_tensor_name(kind, layer),
+        // Tier 3 — attention changes
+        ArchVariant::DeepSeek2 => deepseek2_tensor_name(kind, layer),
+        // Tier 3 — will add as we implement
+        ArchVariant::Gemma3 => llama_tensor_name(kind, layer), // placeholder
+        ArchVariant::K2Horizon => llama_tensor_name(kind, layer), // placeholder
+    }
+}
+/// DeepSeek-V2 MLA tensor names
+fn deepseek2_tensor_name(kind: TensorKind, layer: usize) -> String {
+    match kind {
+        TensorKind::TokenEmbedd => "token_embd.weight".to_string(),
+        TensorKind::Output => "output.weight".to_string(),
+        TensorKind::OutputNorm => "output_norm.weight".to_string(),
+        TensorKind::AttnNorm => format!("blk.{layer}.attn_norm.weight"),
+        TensorKind::AttnOutput => format!("blk.{layer}.attn_output.weight"),
+        TensorKind::FfnNorm => format!("blk.{layer}.ffn_norm.weight"),
+        // MLA attention tensors
+        TensorKind::AttnQANorm => format!("blk.{layer}.attn_q_a_norm.weight"),
+        TensorKind::AttnQA => format!("blk.{layer}.attn_q_a.weight"),
+        TensorKind::AttnQB => format!("blk.{layer}.attn_q_b.weight"),
+        TensorKind::AttnKVAMQA => format!("blk.{layer}.attn_kv_a_mqa.weight"),
+        TensorKind::AttnKVANorm => format!("blk.{layer}.attn_kv_a_norm.weight"),
+        TensorKind::AttnKB => format!("blk.{layer}.attn_k_b.weight"),
+        TensorKind::AttnVB => format!("blk.{layer}.attn_v_b.weight"),
+        // MoE / shared expert tensors
+        TensorKind::FfnGateInp => format!("blk.{layer}.ffn_gate_inp.weight"),
+        TensorKind::FfnUpExps => format!("blk.{layer}.ffn_up_exps.weight"),
+        TensorKind::FfnGateExps => format!("blk.{layer}.ffn_gate_exps.weight"),
+        TensorKind::FfnDownExps => format!("blk.{layer}.ffn_down_exps.weight"),
+        TensorKind::FfnGateShexp => format!("blk.{layer}.ffn_gate_shexp.weight"),
+        TensorKind::FfnUpShexp => format!("blk.{layer}.ffn_up_shexp.weight"),
+        TensorKind::FfnDownShexp => format!("blk.{layer}.ffn_down_shexp.weight"),
+        TensorKind::FfnExpProbsB => format!("blk.{layer}.exp_probs_b.bias"),
+        // Not used by DeepSeek-V2, fall back to llama
+        _ => llama_tensor_name(kind, layer),
+    }
+}
+/// Llama-style tensor names: `blk.N.attn_q.weight`, etc.
+fn llama_tensor_name(kind: TensorKind, layer: usize) -> String {
+    match kind {
+        TensorKind::TokenEmbedd => "token_embd.weight".to_string(),
+        TensorKind::Output => "output.weight".to_string(),
+        TensorKind::OutputNorm => "output_norm.weight".to_string(),
+        TensorKind::AttnNorm => format!("blk.{layer}.attn_norm.weight"),
+        TensorKind::AttnQ => format!("blk.{layer}.attn_q.weight"),
+        TensorKind::AttnK => format!("blk.{layer}.attn_k.weight"),
+        TensorKind::AttnV => format!("blk.{layer}.attn_v.weight"),
+        TensorKind::AttnQKNorm => format!("blk.{layer}.attn_q_norm.weight"),
+        TensorKind::AttnQBias => format!("blk.{layer}.attn_q.bias"),
+        TensorKind::AttnKBias => format!("blk.{layer}.attn_k.bias"),
+        TensorKind::AttnVBias => format!("blk.{layer}.attn_v.bias"),
+        TensorKind::AttnQKVBias => format!("blk.{layer}.attn_qkv.bias"),
+        TensorKind::AttnOutput => format!("blk.{layer}.attn_output.weight"),
+        TensorKind::AttnOutputBias => format!("blk.{layer}.attn_output.bias"),
+        TensorKind::FfnNorm => format!("blk.{layer}.ffn_norm.weight"),
+        TensorKind::FfnUp => format!("blk.{layer}.ffn_up.weight"),
+        TensorKind::FfnGate => format!("blk.{layer}.ffn_gate.weight"),
+        TensorKind::FfnDown => format!("blk.{layer}.ffn_down.weight"),
+        TensorKind::FfnGateInp => format!("blk.{layer}.ffn_gate_inp.weight"),
+        TensorKind::FfnUpExps => format!("blk.{layer}.ffn_up_exps.weight"),
+        TensorKind::FfnGateExps => format!("blk.{layer}.ffn_gate_exps.weight"),
+        TensorKind::FfnDownExps => format!("blk.{layer}.ffn_down_exps.weight"),
+        TensorKind::PositionEmbedd => format!("blk.{layer}.pos_embd.weight"),
+        TensorKind::AttnNormBias => format!("blk.{layer}.attn_norm.bias"),
+        TensorKind::FfnNormBias => format!("blk.{layer}.ffn_norm.bias"),
+        TensorKind::FfnUpBias => format!("blk.{layer}.ffn_up.bias"),
+        TensorKind::FfnDownBias => format!("blk.{layer}.ffn_down.bias"),
+        TensorKind::OutputNormBias => format!("blk.{layer}.output_norm.bias"),
+        // DeepSeek-V2 MLA — not valid in llama layout; fall back to llama name
+        TensorKind::AttnQANorm => format!("blk.{layer}.attn_q_a_norm.weight"),
+        TensorKind::AttnQA => format!("blk.{layer}.attn_q_a.weight"),
+        TensorKind::AttnQB => format!("blk.{layer}.attn_q_b.weight"),
+        TensorKind::AttnKVAMQA => format!("blk.{layer}.attn_kv_a_mqa.weight"),
+        TensorKind::AttnKVANorm => format!("blk.{layer}.attn_kv_a_norm.weight"),
+        TensorKind::AttnKB => format!("blk.{layer}.attn_k_b.weight"),
+        TensorKind::AttnVB => format!("blk.{layer}.attn_v_b.weight"),
+        TensorKind::FfnGateShexp => format!("blk.{layer}.ffn_gate_shexp.weight"),
+        TensorKind::FfnUpShexp => format!("blk.{layer}.ffn_up_shexp.weight"),
+        TensorKind::FfnDownShexp => format!("blk.{layer}.ffn_down_shexp.weight"),
+        TensorKind::FfnExpProbsB => format!("blk.{layer}.exp_probs_b.bias"),
+    }
+}
+/// Phi-3 tensor names: fused QKV, bias on output.
+fn phi3_tensor_name(kind: TensorKind, layer: usize) -> String {
+    match kind {
+        TensorKind::AttnQ => format!("blk.{layer}.attn_qkv.weight"),
+        TensorKind::AttnK => format!("blk.{layer}.attn_qkv.weight"),
+        TensorKind::AttnV => format!("blk.{layer}.attn_qkv.weight"),
+        _ => llama_tensor_name(kind, layer),
+    }
+}
+/// GPT-2 tensor names: use standard GGUF names (same as llama for most, with fused QKV + biases)
+fn gpt2_tensor_name(kind: TensorKind, layer: usize) -> String {
+    match kind {
+        TensorKind::TokenEmbedd => "token_embd.weight".to_string(),
+        TensorKind::Output => "output.weight".to_string(), // tied embeddings handled separately
+        TensorKind::PositionEmbedd => "pos_embd.weight".to_string(),
+        TensorKind::OutputNorm => "output_norm.weight".to_string(),
+        TensorKind::OutputNormBias => "output_norm.bias".to_string(),
+        TensorKind::AttnNorm => format!("blk.{layer}.attn_norm.weight"),
+        TensorKind::AttnNormBias => format!("blk.{layer}.attn_norm.bias"),
+        TensorKind::AttnQ => format!("blk.{layer}.attn_qkv.weight"),
+        TensorKind::AttnK => format!("blk.{layer}.attn_qkv.weight"),
+        TensorKind::AttnV => format!("blk.{layer}.attn_qkv.weight"),
+        TensorKind::AttnQKVBias => format!("blk.{layer}.attn_qkv.bias"),
+        TensorKind::AttnOutput => format!("blk.{layer}.attn_output.weight"),
+        TensorKind::AttnOutputBias => format!("blk.{layer}.attn_output.bias"),
+        TensorKind::FfnNorm => format!("blk.{layer}.ffn_norm.weight"),
+        TensorKind::FfnNormBias => format!("blk.{layer}.ffn_norm.bias"),
+        TensorKind::FfnUp => format!("blk.{layer}.ffn_up.weight"),
+        TensorKind::FfnUpBias => format!("blk.{layer}.ffn_up.bias"),
+        TensorKind::FfnDown => format!("blk.{layer}.ffn_down.weight"),
+        TensorKind::FfnDownBias => format!("blk.{layer}.ffn_down.bias"),
+        _ => llama_tensor_name(kind, layer),
+    }
+}
+/// Falcon tensor names: canonical GGUF `blk.N.` prefix with fused QKV + LayerNorm bias.
+/// Falcon uses a single attn_norm (with bias) for both attention and FFN (parallel path).
+fn falcon_tensor_name(kind: TensorKind, layer: usize) -> String {
+    match kind {
+        TensorKind::TokenEmbedd => "token_embd.weight".to_string(),
+        TensorKind::Output => "output.weight".to_string(),
+        TensorKind::OutputNorm => "output_norm.weight".to_string(),
+        TensorKind::OutputNormBias => "output_norm.bias".to_string(),
+        TensorKind::AttnNorm => format!("blk.{layer}.attn_norm.weight"),
+        TensorKind::AttnNormBias => format!("blk.{layer}.attn_norm.bias"),
+        // Fused QKV: one tensor, split into Q/K/V by row-index ranges
+        TensorKind::AttnQ => format!("blk.{layer}.attn_qkv.weight"),
+        TensorKind::AttnK => format!("blk.{layer}.attn_qkv.weight"),
+        TensorKind::AttnV => format!("blk.{layer}.attn_qkv.weight"),
+        TensorKind::AttnOutput => format!("blk.{layer}.attn_output.weight"),
+        TensorKind::FfnUp => format!("blk.{layer}.ffn_up.weight"),
+        TensorKind::FfnDown => format!("blk.{layer}.ffn_down.weight"),
+        // Falcon has no separate ffn_norm — single attn_norm for both branches
+        // Falcon has no FfnGate — uses GELU activation, not SwiGLU
+        _ => llama_tensor_name(kind, layer),
+    }
+}
+// ---- StreamedTensor ----
+pub struct StreamedTensor<'a> {
+    file: &'a std::cell::RefCell<File>,
+    base: u64,
+    pub dims: &'a [u64],
+    pub dtype: u32,
+    /// row width in elements (dims[0])
+    pub row_elems: usize,
+    /// number of flat rows (product of dims[1..])
+    pub n_rows: usize,
+    pub row_bytes: usize,
+    pub nbytes: u64,
+}
+impl<'a> StreamedTensor<'a> {
+    pub fn new(file: &'a std::cell::RefCell<File>, gf: &'a GGUFFile, t: &'a TensorInfo) -> Self {
+        let base = gf.data_start + t.offset;
+        let n_rows: usize = if t.dims.len() >= 2 {
+            t.dims[1..].iter().product::<u64>() as usize
+        } else {
+            1
+        };
+        let row_bytes = (t.nbytes as usize) / n_rows;
+        StreamedTensor {
+            file,
+            base,
+            dims: &t.dims,
+            dtype: t.dtype,
+            row_elems: t.dims[0] as usize,
+            n_rows,
+            row_bytes,
+            nbytes: t.nbytes,
+        }
+    }
+    /// Stream rows [start, start+n) and dequantize to f32 (n x row_elems).
+    pub fn rows(&self, start: usize, n: usize, buf: &mut Vec<u8>) -> io::Result<Vec<f32>> {
+        read_rows_streamed(
+            &mut self.file.borrow_mut(),
+            self.base,
+            self.dtype,
+            self.row_elems,
+            start,
+            n,
+            self.row_bytes,
+            buf,
+        )
+    }
+}
+// ---- Model ----
+pub struct Model {
+    pub gf: GGUFFile,
+    pub path: String,
+    pub arch: String,
+    pub arch_variant: ArchVariant,
+    tensor_file: std::cell::RefCell<File>,
+    pub n_layers: usize,
+    pub n_embd: usize,
+    pub n_ff: usize,
+    pub n_heads: usize,
+    pub n_kv_heads: usize,
+    pub head_dim: usize,
+    pub rope_theta: f64,
+    pub eps: f64,
+    pub n_experts: usize,
+    pub n_experts_used: usize,
+    // DeepSeek-V2 MLA metadata (canonical GGUF keys, see llama.cpp/src/models/deepseek2.cpp)
+    pub n_lora_q: usize,
+    pub n_lora_kv: usize,
+    pub key_length_mla: usize,
+    pub value_length_mla: usize,
+    pub rope_dim: usize,
+    pub rope_yarn_log_mul: f32,
+    pub rope_scaling_factor: f32,
+    pub rope_attn_factor: f32,
+    pub n_ff_exp: usize,
+    pub n_expert_shared: usize,
+    pub leading_dense_layers: usize,
+    pub expert_weights_scale: f64,
+    pub expert_weights_norm: bool,
+    pub expert_gating_func: u32,
+    pub qk_norm: bool,
+    pub has_bias: bool,
+    pub debug_checksums: bool,
+    pub vocab_size: usize,
+}
+impl Model {
+    pub fn open(path: &str) -> io::Result<Self> {
+        let gf = parse(path)?;
+        let md = &gf.metadata;
+        let get_u = |k: &str| -> io::Result<usize> {
+            md.get(k)
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, format!("missing metadata {k}"))
+                })
+        };
+        let arch_str = md
+            .get("general.architecture")
+            .and_then(|v| v.as_str())
+            .unwrap_or("llama")
+            .to_string();
+        let arch_variant = arch_from_string(&arch_str);
+        let n_layers = get_u(&format!("{arch_str}.block_count"))?;
+        let n_embd = get_u(&format!("{arch_str}.embedding_length"))?;
+        let n_ff = get_u(&format!("{arch_str}.feed_forward_length"))?;
+        let n_heads = get_u(&format!("{arch_str}.attention.head_count"))?;
+        let n_kv_heads = md
+            .get(&format!("{arch_str}.attention.head_count_kv"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(n_heads as u64) as usize;
+        let rope_theta = md
+            .get(&format!("{arch_str}.rope.freq_base"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(10000.0);
+        let eps = md
+            .get(&format!("{arch_str}.attention.layer_norm_rms_epsilon"))
+            .and_then(|v| v.as_f64())
+            .or_else(|| {
+                // GPT-2 (and other non-RMS archs) use the plain LayerNorm epsilon key
+                md.get(&format!("{arch_str}.attention.layer_norm_epsilon"))
+                    .and_then(|v| v.as_f64())
+            })
+            .unwrap_or(1e-5);
+        let n_experts = md
+            .get(&format!("{arch_str}.expert_count"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let n_experts_used = md
+            .get(&format!("{arch_str}.expert_used_count"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1) as usize;
+        // DeepSeek-V2 MLA metadata (canonical GGUF keys, see llama.cpp/src/models/deepseek2.cpp)
+        let n_lora_q = md
+            .get(&format!("{arch_str}.attention.q_lora_rank"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let n_lora_kv = md
+            .get(&format!("{arch_str}.attention.kv_lora_rank"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let key_length_mla = md
+            .get(&format!("{arch_str}.attention.key_length_mla"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let value_length_mla = md
+            .get(&format!("{arch_str}.attention.value_length_mla"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let rope_dim = md
+            .get(&format!("{arch_str}.rope.dimension_count"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let rope_yarn_log_mul = md
+            .get(&format!("{arch_str}.rope.scaling.yarn_log_multiplier"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        // Cancel the factor from the convert script (see [TAG_DEEPSEEK2_YARN_LOG_MUL_FIX] in llama.cpp)
+        let rope_yarn_log_mul = if rope_yarn_log_mul != 0.0 {
+            rope_yarn_log_mul / 0.1
+        } else {
+            0.0
+        };
+        let rope_scaling_factor = md
+            .get(&format!("{arch_str}.rope.scaling.factor"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0);
+        let rope_scaling_factor = if rope_scaling_factor == 0.0 {
+            1.0
+        } else {
+            rope_scaling_factor
+        };
+        let rope_attn_factor = md
+            .get(&format!("{arch_str}.rope.scaling.attn_factor"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0);
+        let n_ff_exp = md
+            .get(&format!("{arch_str}.expert_feed_forward_length"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let n_expert_shared = md
+            .get(&format!("{arch_str}.expert_shared_count"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let leading_dense_layers = md
+            .get(&format!("{arch_str}.leading_dense_block_count"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize;
+        let expert_weights_scale = md
+            .get(&format!("{arch_str}.expert_weights_scale"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let expert_weights_norm = md
+            .get(&format!("{arch_str}.expert_weights_norm"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            != 0;
+        let expert_gating_func = md
+            .get(&format!("{arch_str}.expert_gating_func"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        // vocab_size from canonical GGUF vocabulary metadata (LLM_KV_VOCAB_SIZE)
+        let vocab_size = md
+            .get(&format!("{arch_str}.vocab_size"))
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .or_else(|| {
+                md.get("tokenizer.ggml.tokens")
+                    .and_then(|v| v.as_vec_str())
+                    .map(|v| v.len())
+            })
+            .unwrap_or(0);
+        // DeepSeek-V2 MLA shape validation
+        if arch_variant == ArchVariant::DeepSeek2 {
+            if n_lora_q > 0 && n_lora_kv == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "DeepSeek-V2 MLA: n_lora_kv must be > 0 when n_lora_q > 0",
+                ));
+            }
+            if n_lora_kv > 0 && n_lora_q == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "DeepSeek-V2 MLA: n_lora_q must be > 0 when n_lora_kv > 0 (non-lite variant)",
+                ));
+            }
+            if key_length_mla > 0 && rope_dim > 0 && rope_dim >= key_length_mla {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "DeepSeek-V2 MLA: rope_dim ({}) must be < key_length_mla ({})",
+                        rope_dim, key_length_mla
+                    ),
+                ));
+            }
+            if n_ff_exp > 0 && n_expert_shared > 0 && n_experts == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "DeepSeek-V2 MoE: n_experts must be > 0 when shared experts are present",
+                ));
+            }
+            if leading_dense_layers > n_layers {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "DeepSeek-V2: leading_dense_layers ({}) > n_layers ({})",
+                        leading_dense_layers, n_layers
+                    ),
+                ));
+            }
+            if vocab_size == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "DeepSeek-V2: vocab_size is zero — cannot decode logits",
+                ));
+            }
+        }
+        // Detect qk_norm and has_bias from first layer — uses arch-aware names.
+        let qk_norm =
+            gf.tensors
+                .contains_key(&tensor_name(arch_variant, TensorKind::AttnQKNorm, 0));
+        // GPT-2 uses fused attn_qkv.bias, not separate attn_q.bias / attn_k.bias / attn_v.bias
+        let has_bias = if arch_variant == ArchVariant::GPT2 {
+            gf.tensors
+                .contains_key(&tensor_name(arch_variant, TensorKind::AttnQKVBias, 0))
+        } else {
+            gf.tensors
+                .contains_key(&tensor_name(arch_variant, TensorKind::AttnQBias, 0))
+        };
+        let tensor_file = std::cell::RefCell::new(File::open(path)?);
+        let filetype = md
+            .get("general.file_type")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let head_dim = md
+            .get(&format!("{arch_str}.attention.key_length"))
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(n_embd / n_heads);
+        eprintln!(
+            "[model] arch={} variant={:?} layers={} embd={} heads={} kv={} ff={} head_dim={} experts={}x{} qk_norm={} bias={} file_type={}",
+            arch_str,
+            arch_variant,
+            n_layers,
+            n_embd,
+            n_heads,
+            n_kv_heads,
+            n_ff,
+            head_dim,
+            n_experts,
+            n_experts_used,
+            qk_norm,
+            has_bias,
+            filetype
+        );
+        Ok(Model {
+            gf,
+            path: path.to_string(),
+            arch: arch_str,
+            arch_variant,
+            tensor_file,
+            n_layers,
+            n_embd,
+            n_ff,
+            n_heads,
+            n_kv_heads,
+            head_dim,
+            rope_theta,
+            eps,
+            n_experts,
+            n_experts_used,
+            // DeepSeek-V2 MLA metadata
+            n_lora_q,
+            n_lora_kv,
+            key_length_mla,
+            value_length_mla,
+            rope_dim,
+            rope_yarn_log_mul: rope_yarn_log_mul as f32,
+            rope_scaling_factor: rope_scaling_factor as f32,
+            rope_attn_factor: rope_attn_factor as f32,
+            n_ff_exp,
+            n_expert_shared,
+            leading_dense_layers,
+            expert_weights_scale,
+            expert_weights_norm,
+            expert_gating_func,
+            qk_norm,
+            has_bias,
+            debug_checksums: std::env::var("SLOW_DEBUG").is_ok(),
+            vocab_size,
+        })
+    }
+    fn t<'a>(&'a self, kind: TensorKind, layer: usize) -> io::Result<StreamedTensor<'a>> {
+        let name = tensor_name(self.arch_variant, kind, layer);
+        let info = self
+            .gf
+            .tensors
+            .get(&name)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("tensor {name}")))?;
+        Ok(StreamedTensor::new(&self.tensor_file, &self.gf, info))
+    }
+    /// Lookup a tensor by exact name string (for architecture-specific bridging).
+    fn t_by_name<'a>(&'a self, name: &str) -> io::Result<StreamedTensor<'a>> {
+        let info = self
+            .gf
+            .tensors
+            .get(name)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, format!("tensor {name}")))?;
+        Ok(StreamedTensor::new(&self.tensor_file, &self.gf, info))
+    }
+    /// y = W @ x, streaming W row-blocks from disk. Reuses one small buffer.
+    fn matvec<'a>(
+        &'a self,
+        w: &StreamedTensor<'a>,
+        x: &[f32],
+        buf: &mut Vec<u8>,
+    ) -> io::Result<Vec<f32>> {
+        let mut y = vec![0f32; w.n_rows];
+        let chunk_rows = (262_144 / w.row_bytes).max(1);
+        let mut start = 0;
+        while start < w.n_rows {
+            let n = chunk_rows.min(w.n_rows - start);
+            let rows = w.rows(start, n, buf)?;
+            for r in 0..n {
+                let row = &rows[r * w.row_elems..(r + 1) * w.row_elems];
+                y[start + r] = row.iter().zip(x).map(|(a, b)| a * b).sum::<f32>();
+            }
+            start += n;
+        }
+        Ok(y)
+    }
+    /// Helper: load bias tensor if present, return vec![0; n] otherwise.
+    fn bias_vec(
+        &self,
+        layer: usize,
+        kind: TensorKind,
+        n: usize,
+        buf: &mut Vec<u8>,
+    ) -> io::Result<Vec<f32>> {
+        let name = tensor_name(self.arch_variant, kind, layer);
+        match self.t_by_name(&name) {
+            Ok(t) => {
+                let v = t.rows(0, 1, buf)?;
+                Ok(v.iter().take(n).copied().collect())
+            }
+            Err(_) => Ok(vec![0f32; n]),
+        }
+    }
+    /// Apply a 1-D bias to x (in-place).
+    fn add_bias(x: &mut [f32], bias: &[f32]) {
+        for (a, b) in x.iter_mut().zip(bias) {
+            *a += b;
+        }
+    }
+    /// LayerNorm: y = (x - mean) / sqrt(var + eps) * weight + bias
+    pub fn layernorm(x: &[f32], w: &[f32], bias: &[f32], eps: f32) -> Vec<f32> {
+        let n = x.len();
+        let mean = x.iter().sum::<f32>() / n as f32;
+        let var = x.iter().map(|v| (v - mean) * (v - mean)).sum::<f32>() / n as f32;
+        let inv = 1.0 / (var + eps).sqrt();
+        x.iter()
+            .zip(w)
+            .enumerate()
+            .map(|(i, (v, wi))| (v - mean) * inv * wi + bias.get(i).copied().unwrap_or(0.0))
+            .collect()
+    }
+    /// GELU activation (approximate: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3))))
+    pub fn gelu(x: f32) -> f32 {
+        let c = (2.0f32 / std::f32::consts::PI).sqrt();
+        0.5f32 * x * (1.0f32 + (c * (x + 0.044715f32 * x * x * x)).tanh())
+    }
+    /// Dense FFN: silu(gate(x)) * up(x) -> down, or GELU for GPT-2
+    fn dense_ffn(&self, layer: usize, x: &[f32], buf: &mut Vec<u8>) -> io::Result<Vec<f32>> {
+        self.dense_ffn_act(layer, x, buf, false)
+    }
+    fn dense_ffn_act(
+        &self,
+        layer: usize,
+        x: &[f32],
+        buf: &mut Vec<u8>,
+        use_gelu: bool,
+    ) -> io::Result<Vec<f32>> {
+        let up_t = self.t(TensorKind::FfnUp, layer)?;
+        let down_t = self.t(TensorKind::FfnDown, layer)?;
+        let n_ff = self.n_ff;
+        let mut up = vec![0f32; n_ff];
+        let chunk = (262_144 / up_t.row_bytes).max(1);
+        let mut s = 0usize;
+        while s < n_ff {
+            let n = chunk.min(n_ff - s);
+            let u = up_t.rows(s, n, buf)?;
+            for r in 0..n {
+                let ur = &u[r * up_t.row_elems..(r + 1) * up_t.row_elems];
+                up[s + r] = ur.iter().zip(x).map(|(a, b)| a * b).sum::<f32>();
+            }
+            s += n;
+        }
+        // GPT-2: GELU(up(x) + b_up) — single dense layer, no gate
+        let mut h = vec![0f32; n_ff];
+        if use_gelu {
+            let up_b = self.bias_vec(layer, TensorKind::FfnUpBias, n_ff, buf)?;
+            for i in 0..n_ff {
+                h[i] = Self::gelu(up[i] + up_b[i]);
+            }
+        } else {
+            // Llama-style: silu(gate(x)) * up(x)
+            let gate_t = self.t(TensorKind::FfnGate, layer)?;
+            let mut gate = vec![0f32; n_ff];
+            let chunk = (262_144 / gate_t.row_bytes).max(1);
+            let mut s = 0usize;
+            while s < n_ff {
+                let n = chunk.min(n_ff - s);
+                let g = gate_t.rows(s, n, buf)?;
+                for r in 0..n {
+                    let gr = &g[r * gate_t.row_elems..(r + 1) * gate_t.row_elems];
+                    gate[s + r] = gr.iter().zip(x).map(|(a, b)| a * b).sum::<f32>();
+                }
+                s += n;
+            }
+            for i in 0..n_ff {
+                h[i] = gate[i] / (1.0 + (-gate[i]).exp()) * up[i];
+            }
+        }
+        let n_embd = self.n_embd;
+        let mut out = vec![0f32; n_embd];
+        let down_b = self.bias_vec(layer, TensorKind::FfnDownBias, n_embd, buf)?;
+        let chunk = (262_144 / down_t.row_bytes).max(1);
+        let mut s = 0usize;
+        while s < n_embd {
+            let n = chunk.min(n_embd - s);
+            let d = down_t.rows(s, n, buf)?;
+            for r in 0..n {
+                let dr = &d[r * down_t.row_elems..(r + 1) * down_t.row_elems];
+                out[s + r] = dr.iter().zip(&h).map(|(a, b)| a * b).sum::<f32>() + down_b[s + r];
+            }
+            s += n;
+        }
+        Ok(out)
+    }
+    /// One expert's FFN: down_e( silu(gate_e x) * (up_e x) ).
+    fn expert(&self, layer: usize, e: usize, x: &[f32], buf: &mut Vec<u8>) -> io::Result<Vec<f32>> {
+        let up_t = self.t(TensorKind::FfnUpExps, layer)?;
+        let gate_t = self.t(TensorKind::FfnGateExps, layer)?;
+        let down_t = self.t(TensorKind::FfnDownExps, layer)?;
+        let rpe_up = up_t.n_rows / self.n_experts;
+        let rpe_down = down_t.n_rows / self.n_experts;
+        let mut up = vec![0f32; rpe_up];
+        let mut gate = vec![0f32; rpe_up];
+        let chunk = (262_144 / up_t.row_bytes).max(1);
+        let mut s = 0usize;
+        while s < rpe_up {
+            let n = chunk.min(rpe_up - s);
+            let u = up_t.rows(e * rpe_up + s, n, buf)?;
+            let g = gate_t.rows(e * rpe_up + s, n, buf)?;
+            for r in 0..n {
+                let ur = &u[r * up_t.row_elems..(r + 1) * up_t.row_elems];
+                let gr = &g[r * up_t.row_elems..(r + 1) * up_t.row_elems];
+                up[s + r] = ur.iter().zip(x).map(|(a, b)| a * b).sum::<f32>();
+                gate[s + r] = gr.iter().zip(x).map(|(a, b)| a * b).sum::<f32>();
+            }
+            s += n;
+        }
+        let mut h = vec![0f32; rpe_up];
+        for i in 0..rpe_up {
+            h[i] = gate[i] / (1.0 + (-gate[i]).exp()) * up[i];
+        }
+        let mut out = vec![0f32; rpe_down];
+        let chunk = (262_144 / down_t.row_bytes).max(1);
+        let mut s = 0usize;
+        while s < rpe_down {
+            let n = chunk.min(rpe_down - s);
+            let d = down_t.rows(e * rpe_down + s, n, buf)?;
+            for r in 0..n {
+                let dr = &d[r * down_t.row_elems..(r + 1) * down_t.row_elems];
+                out[s + r] = dr.iter().zip(&h).map(|(a, b)| a * b).sum::<f32>();
+            }
+            s += n;
+        }
+        Ok(out)
+    }
+    /// DeepSeek-V2 MLA forward pass (single token, streaming).
+    /// Uses absorption-optimized MLA: Q = concat(wk_b_absorbed, q_pe),
+    /// K = concat(kv_cmpr, k_pe) stored in latent cache, V expanded from latent via wv_b.
+    /// After absorption, attention is MQA (1 KV group).
+    fn forward_deepseek2(
+        &self,
+        token: usize,
+        pos: usize,
+        mla_k_cache: &mut [Vec<f32>],
+        buf: &mut Vec<u8>,
+    ) -> io::Result<Vec<f32>> {
+        let n_embd = self.n_embd;
+        let n_heads = self.n_heads;
+        let n_lora_kv = self.n_lora_kv;
+        let rope_dim = self.rope_dim;
+        let key_length_mla = self.key_length_mla;
+        let value_length_mla = self.value_length_mla;
+        let n_ff_exp = self.n_ff_exp;
+        let n_expert_shared = self.n_expert_shared;
+        let n_embd_head_qk_nope = key_length_mla - rope_dim;
+        let dk = n_lora_kv + rope_dim; // latent K dimension per position
+        let eps = self.eps as f32;
+        debug_assert!(
+            key_length_mla > rope_dim,
+            "key_length_mla > rope_dim required for MLA"
+        );
+
+        // token embedding
+        let tok_t = self.t(TensorKind::TokenEmbedd, 0)?;
+        let mut x = tok_t.rows(token, 1, buf)?;
+        x.truncate(n_embd);
+
+        for layer in 0..self.n_layers {
+            // ---- attention ----
+            let norm_t = self.t(TensorKind::AttnNorm, layer)?;
+            let w = norm_t.rows(0, 1, buf)?;
+            let t = rmsnorm(&x, &w, eps);
+
+            // Q projection: lite vs non-lite
+            let is_lite = self.n_lora_q == 0;
+            let q = if is_lite {
+                let wq_t = self.t(TensorKind::AttnQA, layer)?;
+                self.matvec(&wq_t, &t, buf)?
+            } else {
+                let wq_a_t = self.t(TensorKind::AttnQA, layer)?;
+                let q_a = self.matvec(&wq_a_t, &t, buf)?;
+                let norm_q_t = self.t(TensorKind::AttnQANorm, layer)?;
+                let q_norm_w = norm_q_t.rows(0, 1, buf)?;
+                let q_a = rmsnorm(&q_a, &q_norm_w, eps);
+                let wq_b_t = self.t(TensorKind::AttnQB, layer)?;
+                self.matvec(&wq_b_t, &q_a, buf)?
+            };
+
+            // Split Q into per-head q_nope + q_pe
+            let mut q_nope = vec![0f32; n_heads * n_embd_head_qk_nope];
+            let mut q_pe = vec![0f32; n_heads * rope_dim];
+            for h in 0..n_heads {
+                let h_off = h * key_length_mla;
+                for i in 0..n_embd_head_qk_nope {
+                    q_nope[h * n_embd_head_qk_nope + i] = q[h_off + i];
+                }
+                for i in 0..rope_dim {
+                    q_pe[h * rope_dim + i] = q[h_off + n_embd_head_qk_nope + i];
+                }
+            }
+
+            // KV compression: x @ wkv_a_mqa → [kv_lora_rank + rope_dim]
+            let wkv_a_t = self.t(TensorKind::AttnKVAMQA, layer)?;
+            let kv_cmpr_pe = self.matvec(&wkv_a_t, &t, buf)?;
+            let mut kv_cmpr: Vec<f32> = kv_cmpr_pe[..n_lora_kv].to_vec();
+            let mut k_pe: Vec<f32> = kv_cmpr_pe[n_lora_kv..n_lora_kv + rope_dim].to_vec();
+
+            // RMSNorm KV compressed latent
+            let kv_norm_t = self.t(TensorKind::AttnKVANorm, layer)?;
+            let kv_norm_w = kv_norm_t.rows(0, 1, buf)?;
+            kv_cmpr = rmsnorm(&kv_cmpr, &kv_norm_w, eps);
+
+            // RoPE on both q_pe (per head) and k_pe (shared)
+            for h in 0..n_heads {
+                rope(
+                    &mut q_pe[h * rope_dim..(h + 1) * rope_dim],
+                    pos,
+                    self.rope_theta,
+                );
+            }
+            rope(&mut k_pe, pos, self.rope_theta);
+
+            // Absorption: wk_b[n_embd_head_qk_nope, n_lora_kv, n_head] @ q_nope
+            // absorbed_q[h, k] = sum_i wk_b[i, k, h] * q_nope[h, i]
+            let wk_b_t = self.t(TensorKind::AttnKB, layer)?;
+            let wk_b_rpe = wk_b_t.row_elems; // n_embd_head_qk_nope
+            let rows_per_head = n_lora_kv;
+            let mut absorbed_q = vec![0f32; n_heads * n_lora_kv];
+            let chunk = (262_144 / wk_b_t.row_bytes).max(1);
+            for h in 0..n_heads {
+                let q_nope_h = &q_nope[h * n_embd_head_qk_nope..(h + 1) * n_embd_head_qk_nope];
+                let mut s = 0usize;
+                while s < n_lora_kv {
+                    let n = chunk.min(n_lora_kv - s);
+                    let rows = wk_b_t.rows(h * rows_per_head + s, n, buf)?;
+                    for r in 0..n {
+                        let row = &rows[r * wk_b_rpe..(r + 1) * wk_b_rpe];
+                        absorbed_q[h * n_lora_kv + s + r] =
+                            row.iter().zip(q_nope_h).map(|(a, b)| a * b).sum::<f32>();
+                    }
+                    s += n;
+                }
+            }
+
+            // Store latent K = [kv_cmpr, k_pe] in MLA cache (MQA: 1 KV group)
+            let mla_stride = dk;
+            let kc = &mut mla_k_cache[layer];
+            for i in 0..n_lora_kv {
+                kc[pos * mla_stride + i] = kv_cmpr[i];
+            }
+            for i in 0..rope_dim {
+                kc[pos * mla_stride + n_lora_kv + i] = k_pe[i];
+            }
+
+            // MQA attention: n_heads share one KV, V expanded from latent via wv_b
+            let kq_scale = self.deepseek2_kq_scale();
+
+            let mut att_out = vec![0f32; n_heads * value_length_mla];
+            let wv_b_t = self.t(TensorKind::AttnVB, layer)?;
+            let wv_b_rpe = wv_b_t.row_elems; // n_lora_kv
+            let wv_b_rph = value_length_mla;
+
+            for h in 0..n_heads {
+                let a_off = h * n_lora_kv;
+                let p_off = h * rope_dim;
+
+                // scores over all cached positions
+                let mut scores = vec![0f32; pos + 1];
+                for p in 0..=pos {
+                    let k_off = p * mla_stride;
+                    let mut s = 0.0f32;
+                    for i in 0..n_lora_kv {
+                        s += absorbed_q[a_off + i] * kc[k_off + i];
+                    }
+                    for i in 0..rope_dim {
+                        s += q_pe[p_off + i] * kc[k_off + n_lora_kv + i];
+                    }
+                    scores[p] = s * kq_scale;
+                }
+                let probs = softmax(&mut scores);
+
+                // weighted sum of compressed KV across positions
+                let mut cmpr_weighted = vec![0f32; n_lora_kv];
+                for p in 0..=pos {
+                    let k_off = p * mla_stride;
+                    let w = probs[p];
+                    for i in 0..n_lora_kv {
+                        cmpr_weighted[i] += w * kc[k_off + i];
+                    }
+                }
+
+                // V expansion: wv_b[:,:,h]^T @ cmpr_weighted → [value_length_mla]
+                let v_off = h * value_length_mla;
+                let chunk = (262_144 / wv_b_t.row_bytes).max(1);
+                let mut s = 0usize;
+                while s < value_length_mla {
+                    let n = chunk.min(value_length_mla - s);
+                    let rows = wv_b_t.rows(h * wv_b_rph + s, n, buf)?;
+                    for r in 0..n {
+                        let row = &rows[r * wv_b_rpe..(r + 1) * wv_b_rpe];
+                        att_out[v_off + s + r] = row
+                            .iter()
+                            .zip(&cmpr_weighted)
+                            .map(|(a, b)| a * b)
+                            .sum::<f32>();
+                    }
+                    s += n;
+                }
+            }
+
+            // Output projection
+            let wo_t = self.t(TensorKind::AttnOutput, layer)?;
+            let wo_out = self.matvec(&wo_t, &att_out, buf)?;
+            for i in 0..n_embd {
+                x[i] += wo_out[i];
+            }
+
+            // ---- FFN ----
+            let fnorm_t = self.t(TensorKind::FfnNorm, layer)?;
+            let w_ffn = fnorm_t.rows(0, 1, buf)?;
+            let t_ffn = rmsnorm(&x, &w_ffn, eps);
+
+            if layer < self.leading_dense_layers {
+                // Dense-lead FFN: SiLU gate + up + down
+                let n_ff = self.n_ff;
+                let up_t = self.t(TensorKind::FfnUp, layer)?;
+                let gate_t = self.t(TensorKind::FfnGate, layer)?;
+                let down_t = self.t(TensorKind::FfnDown, layer)?;
+                let mut up = vec![0f32; n_ff];
+                let mut gate = vec![0f32; n_ff];
+                let chunk = (262_144 / up_t.row_bytes).max(1);
+                let mut s = 0usize;
+                while s < n_ff {
+                    let n = chunk.min(n_ff - s);
+                    let u = up_t.rows(s, n, buf)?;
+                    let g = gate_t.rows(s, n, buf)?;
+                    for r in 0..n {
+                        let ur = &u[r * up_t.row_elems..(r + 1) * up_t.row_elems];
+                        let gr = &g[r * up_t.row_elems..(r + 1) * up_t.row_elems];
+                        up[s + r] = ur.iter().zip(&t_ffn).map(|(a, b)| a * b).sum::<f32>();
+                        gate[s + r] = gr.iter().zip(&t_ffn).map(|(a, b)| a * b).sum::<f32>();
+                    }
+                    s += n;
+                }
+                let mut h = vec![0f32; n_ff];
+                for i in 0..n_ff {
+                    h[i] = gate[i] / (1.0 + (-gate[i]).exp()) * up[i];
+                }
+                let mut ff_out = vec![0f32; n_embd];
+                let chunk = (262_144 / down_t.row_bytes).max(1);
+                let mut s = 0usize;
+                while s < n_embd {
+                    let n = chunk.min(n_embd - s);
+                    let d = down_t.rows(s, n, buf)?;
+                    for r in 0..n {
+                        let dr = &d[r * down_t.row_elems..(r + 1) * down_t.row_elems];
+                        ff_out[s + r] = dr.iter().zip(&h).map(|(a, b)| a * b).sum::<f32>();
+                    }
+                    s += n;
+                }
+                for i in 0..n_embd {
+                    x[i] += ff_out[i];
+                }
+            } else {
+                // MoE with shared experts
+                let n_used = self.n_experts_used;
+                let router_t = self.t(TensorKind::FfnGateInp, layer)?;
+                let router_logits = self.matvec(&router_t, &t_ffn, buf)?;
+                let top = top_k(&router_logits, n_used);
+                let mut probs_all = router_logits.clone();
+                let max = probs_all.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+                let sum: f32 = probs_all.iter().map(|v| (v - max).exp()).sum();
+                for v in &mut probs_all {
+                    *v = (*v - max).exp() / sum;
+                }
+                let top: Vec<(usize, f32)> = top.into_iter().map(|e| (e, probs_all[e])).collect();
+                let mut moe_out = vec![0f32; n_embd];
+                for (e, wgt) in top {
+                    let e_out = self.expert(layer, e, &t_ffn, buf)?;
+                    for i in 0..n_embd {
+                        moe_out[i] += wgt * e_out[i];
+                    }
+                }
+                // Shared experts
+                let n_sh_dim = n_ff_exp * n_expert_shared;
+                let up_sh_t = self.t(TensorKind::FfnUpShexp, layer)?;
+                let gate_sh_t = self.t(TensorKind::FfnGateShexp, layer)?;
+                let down_sh_t = self.t(TensorKind::FfnDownShexp, layer)?;
+                let mut sh_up = vec![0f32; n_sh_dim];
+                let mut sh_gate = vec![0f32; n_sh_dim];
+                let chunk = (262_144 / up_sh_t.row_bytes).max(1);
+                let mut s = 0usize;
+                while s < n_sh_dim {
+                    let n = chunk.min(n_sh_dim - s);
+                    let u = up_sh_t.rows(s, n, buf)?;
+                    let g = gate_sh_t.rows(s, n, buf)?;
+                    for r in 0..n {
+                        let ur = &u[r * up_sh_t.row_elems..(r + 1) * up_sh_t.row_elems];
+                        let gr = &g[r * gate_sh_t.row_elems..(r + 1) * gate_sh_t.row_elems];
+                        sh_up[s + r] = ur.iter().zip(&t_ffn).map(|(a, b)| a * b).sum::<f32>();
+                        sh_gate[s + r] = gr.iter().zip(&t_ffn).map(|(a, b)| a * b).sum::<f32>();
+                    }
+                    s += n;
+                }
+                let mut sh_h = vec![0f32; n_sh_dim];
+                for i in 0..n_sh_dim {
+                    sh_h[i] = sh_gate[i] / (1.0 + (-sh_gate[i]).exp()) * sh_up[i];
+                }
+                let mut sh_out = vec![0f32; n_embd];
+                let chunk = (262_144 / down_sh_t.row_bytes).max(1);
+                let mut s = 0usize;
+                while s < n_embd {
+                    let n = chunk.min(n_embd - s);
+                    let d = down_sh_t.rows(s, n, buf)?;
+                    for r in 0..n {
+                        let dr = &d[r * down_sh_t.row_elems..(r + 1) * down_sh_t.row_elems];
+                        sh_out[s + r] = dr.iter().zip(&sh_h).map(|(a, b)| a * b).sum::<f32>();
+                    }
+                    s += n;
+                }
+                for i in 0..n_embd {
+                    x[i] += moe_out[i] + sh_out[i];
+                }
+            }
+        }
+        // final norm + logits
+        let onorm_t = self.t(TensorKind::OutputNorm, 0)?;
+        let w = onorm_t.rows(0, 1, buf)?;
+        let x = rmsnorm(&x, &w, eps);
+        let out_t = match self.t(TensorKind::Output, 0) {
+            Ok(t) => t,
+            Err(_) => self.t(TensorKind::TokenEmbedd, 0)?,
+        };
+        self.matvec(&out_t, &x, buf)
+    }
+
+    pub fn forward(
+        &self,
+        token: usize,
+        pos: usize,
+        k_cache: &mut [Vec<f32>],
+        v_cache: &mut [Vec<f32>],
+        buf: &mut Vec<u8>,
+    ) -> io::Result<Vec<f32>> {
+        // Dispatch to DeepSeek-V2 MLA forward pass
+        if self.arch_variant == ArchVariant::DeepSeek2 {
+            return self.forward_deepseek2(token, pos, k_cache, buf);
+        }
+        let n_embd = self.n_embd;
+        let head_dim = self.head_dim;
+        let n_heads = self.n_heads;
+        let n_kv_heads = self.n_kv_heads;
+        let kv_group = n_heads / n_kv_heads;
+        let kv_stride = n_kv_heads * head_dim;
+        // token embedding row
+        let tok_t = self.t(TensorKind::TokenEmbedd, 0)?;
+        let mut x = tok_t.rows(token, 1, buf)?;
+        x.truncate(n_embd);
+        // GPT-2: add learned absolute positional embeddings (no RoPE)
+        if self.arch_variant == ArchVariant::GPT2 {
+            let pos_t = self.t(TensorKind::PositionEmbedd, 0)?;
+            let pos_emb = pos_t.rows(pos, 1, buf)?;
+            for i in 0..n_embd {
+                x[i] += pos_emb[i];
+            }
+        }
+        if self.debug_checksums {
+            let s: f32 = x.iter().map(|v| v.abs()).sum();
+            eprintln!("embd x_sum={s:.6} first3={:?}", &x[..3]);
+        }
+        for layer in 0..self.n_layers {
+            // ---- attention ----
+            let norm_t = self.t(TensorKind::AttnNorm, layer)?;
+            let w = norm_t.rows(0, 1, buf)?;
+            // GPT-2 and Falcon use LayerNorm (mean-centering + variance) with bias, not RMSNorm
+            let t = if self.arch_variant == ArchVariant::GPT2
+                || self.arch_variant == ArchVariant::Falcon
+            {
+                let b = self.bias_vec(layer, TensorKind::AttnNormBias, n_embd, buf)?;
+                Self::layernorm(&x, &w, &b, self.eps as f32)
+            } else {
+                rmsnorm(&x, &w, self.eps as f32)
+            };
+            let (mut q, mut k, mut v) = if self.arch_variant == ArchVariant::Phi3
+                || self.arch_variant == ArchVariant::Falcon
+            {
+                // Fused attn_qkv.weight: [n_embd + 2*n_kv_heads*head_dim, n_embd]
+                // One matvec, then split the result into Q/K/V slices.
+                let qkv_t = self.t(TensorKind::AttnQ, layer)?;
+                let qkv = self.matvec(&qkv_t, &t, buf)?;
+                let q_end = n_embd;
+                let k_end = n_embd + n_kv_heads * head_dim;
+                (
+                    qkv[..q_end].to_vec(),
+                    qkv[q_end..k_end].to_vec(),
+                    qkv[k_end..].to_vec(),
+                )
+            } else if self.arch_variant == ArchVariant::GPT2 {
+                // GPT-2 has fused QKV: model.h.{layer}.attn.c_attn.weight [3*n_embd, n_embd]
+                // One matvec, then split into Q/K/V (MHA: n_kv_heads = n_heads)
+                let wqkv_t = self.t(TensorKind::AttnQ, layer)?;
+                let qkv = self.matvec(&wqkv_t, &t, buf)?;
+                let q_end = n_embd;
+                let k_end = n_embd + n_embd; // n_kv_heads == n_heads for GPT-2 MHA
+                (
+                    qkv[..q_end].to_vec(),
+                    qkv[q_end..k_end].to_vec(),
+                    qkv[k_end..].to_vec(),
+                )
+            } else {
+                let wq = self.t(TensorKind::AttnQ, layer)?;
+                let wk = self.t(TensorKind::AttnK, layer)?;
+                let wv = self.t(TensorKind::AttnV, layer)?;
+                (
+                    self.matvec(&wq, &t, buf)?,
+                    self.matvec(&wk, &t, buf)?,
+                    self.matvec(&wv, &t, buf)?,
+                )
+            };
+            // Add bias if present
+            if self.has_bias {
+                if self.arch_variant == ArchVariant::GPT2 {
+                    // GPT-2 has fused attn_qkv.bias [3*n_embd]; split into Q/K/V
+                    let qkv_bias =
+                        self.bias_vec(layer, TensorKind::AttnQKVBias, 3 * n_embd, buf)?;
+                    for i in 0..n_embd {
+                        q[i] += qkv_bias[i];
+                    }
+                    for i in 0..n_embd {
+                        k[i] += qkv_bias[n_embd + i];
+                    }
+                    for i in 0..n_embd {
+                        v[i] += qkv_bias[2 * n_embd + i];
+                    }
+                } else {
+                    let q_bias = self.bias_vec(layer, TensorKind::AttnQBias, n_embd, buf)?;
+                    let k_bias =
+                        self.bias_vec(layer, TensorKind::AttnKBias, n_kv_heads * head_dim, buf)?;
+                    let v_bias =
+                        self.bias_vec(layer, TensorKind::AttnVBias, n_kv_heads * head_dim, buf)?;
+                    for i in 0..n_embd {
+                        q[i] += q_bias[i];
+                    }
+                    for i in 0..n_kv_heads * head_dim {
+                        k[i] += k_bias[i];
+                    }
+                    for i in 0..n_kv_heads * head_dim {
+                        v[i] += v_bias[i];
+                    }
+                }
+            }
+            // Expand K/V from n_kv_heads to n_heads (GQA repeat)
+            let k_full = if n_kv_heads == n_heads {
+                k
+            } else {
+                let mut k2 = vec![0f32; n_embd];
+                for h in 0..n_heads {
+                    let kv_h = h / kv_group;
+                    let src = &k[kv_h * head_dim..(kv_h + 1) * head_dim];
+                    let dst = &mut k2[h * head_dim..(h + 1) * head_dim];
+                    dst.copy_from_slice(src);
+                }
+                k2
+            };
+            let v_full = if n_kv_heads == n_heads {
+                v
+            } else {
+                let mut v2 = vec![0f32; n_embd];
+                for h in 0..n_heads {
+                    let kv_h = h / kv_group;
+                    let src = &v[kv_h * head_dim..(kv_h + 1) * head_dim];
+                    let dst = &mut v2[h * head_dim..(h + 1) * head_dim];
+                    dst.copy_from_slice(src);
+                }
+                v2
+            };
+            let mut k = k_full;
+            let v = v_full;
+            // optional QK-norm
+            let (mut q_norm, mut k_norm) = if self.qk_norm {
+                let qw = self.t(TensorKind::AttnQKNorm, layer)?;
+                let kw_name = tensor_name(self.arch_variant, TensorKind::AttnQKNorm, layer)
+                    .replace("attn_q_norm", "attn_k_norm");
+                let kw = self.t_by_name(&kw_name)?;
+                let qw = qw.rows(0, 1, buf)?;
+                let kw = kw.rows(0, 1, buf)?;
+                (
+                    qk_norm_row(&q, &qw, head_dim, self.eps as f32),
+                    qk_norm_row(&k, &kw, head_dim, self.eps as f32),
+                )
+            } else {
+                (q, k)
+            };
+            // RoPE (skip for GPT-2: uses learned positional embeddings instead)
+            if self.arch_variant != ArchVariant::GPT2 {
+                for h in 0..n_heads {
+                    let s = h * head_dim;
+                    rope(&mut q_norm[s..s + head_dim], pos, self.rope_theta);
+                }
+                for h in 0..n_heads {
+                    let s = h * head_dim;
+                    rope(&mut k_norm[s..s + head_dim], pos, self.rope_theta);
+                }
+            }
+            // write KV cache
+            let k_src = &k_norm;
+            let v_src = &v;
+            for kv_h in 0..n_kv_heads {
+                let ks = kv_h * kv_group * head_dim;
+                for p in 0..head_dim {
+                    k_cache[layer][pos * kv_stride + kv_h * head_dim + p] = k_src[ks + p];
+                    v_cache[layer][pos * kv_stride + kv_h * head_dim + p] = v_src[ks + p];
+                }
+            }
+            // attention over cached keys
+            let scale = 1.0 / (head_dim as f32).sqrt();
+            let mut att_out = vec![0f32; n_embd];
+            for h in 0..n_heads {
+                let kv_h = h / kv_group;
+                let mut scores = vec![0f32; pos + 1];
+                for p in 0..=pos {
+                    let kr = &k_cache[layer]
+                        [p * kv_stride + kv_h * head_dim..p * kv_stride + (kv_h + 1) * head_dim];
+                    let qh = &q_norm[h * head_dim..(h + 1) * head_dim];
+                    scores[p] = kr.iter().zip(qh).map(|(a, b)| a * b).sum::<f32>() * scale;
+                }
+                let probs = softmax(&mut scores);
+                for p in 0..=pos {
+                    let vr = &v_cache[layer]
+                        [p * kv_stride + kv_h * head_dim..p * kv_stride + (kv_h + 1) * head_dim];
+                    let pr = probs[p];
+                    for (o, vv) in att_out[h * head_dim..(h + 1) * head_dim].iter_mut().zip(vr) {
+                        *o += pr * vv;
+                    }
+                }
+            }
+            let wo = self.t(TensorKind::AttnOutput, layer)?;
+            let wo_out = self.matvec(&wo, &att_out, buf)?;
+            // GPT-2 has attn_output.bias; add it to the residual
+            if self.arch_variant == ArchVariant::GPT2 && self.has_bias {
+                let wo_b = self.bias_vec(layer, TensorKind::AttnOutputBias, n_embd, buf)?;
+                for i in 0..n_embd {
+                    x[i] += wo_out[i] + wo_b[i];
+                }
+            } else {
+                for i in 0..n_embd {
+                    x[i] += wo_out[i];
+                }
+            }
+            // ---- FFN ----
+            if self.arch_variant == ArchVariant::Falcon {
+                // Falcon: parallel attention+FFN — FFN uses the SAME normalized
+                // input as attention (`t`), not a separate norm of the residual.
+                // Falcon uses GELU activation (no gate tensor).
+                let ff_out = self.dense_ffn_act(layer, &t, buf, true)?;
+                for i in 0..n_embd {
+                    x[i] += ff_out[i];
+                }
+            } else {
+                let fnorm_t = self.t(TensorKind::FfnNorm, layer)?;
+                let w = fnorm_t.rows(0, 1, buf)?;
+                // GPT-2 uses LayerNorm with bias for ffn_norm (ln_2)
+                let t_ffn = if self.arch_variant == ArchVariant::GPT2 {
+                    let b = self.bias_vec(layer, TensorKind::FfnNormBias, n_embd, buf)?;
+                    Self::layernorm(&x, &w, &b, self.eps as f32)
+                } else {
+                    rmsnorm(&x, &w, self.eps as f32)
+                };
+                let has_router = self.gf.tensors.contains_key(&tensor_name(
+                    self.arch_variant,
+                    TensorKind::FfnGateInp,
+                    layer,
+                ));
+                if self.n_experts > 0 && has_router {
+                    // MoE
+                    let router_t = self.t(TensorKind::FfnGateInp, layer)?;
+                    let router_logits = self.matvec(&router_t, &t_ffn, buf)?;
+                    let top = top_k(&router_logits, self.n_experts_used);
+                    let probs_all = softmax(&mut router_logits.clone().into_boxed_slice());
+                    let top: Vec<(usize, f32)> =
+                        top.into_iter().map(|e| (e, probs_all[e])).collect();
+                    let mut moe_out = vec![0f32; n_embd];
+                    for (e, wgt) in top {
+                        let e_out = self.expert(layer, e, &t_ffn, buf)?;
+                        for i in 0..n_embd {
+                            moe_out[i] += wgt * e_out[i];
+                        }
+                    }
+                    for i in 0..n_embd {
+                        x[i] += moe_out[i];
+                    }
+                } else {
+                    let ff_out = if self.arch_variant == ArchVariant::GPT2 {
+                        self.dense_ffn_act(layer, &t_ffn, buf, true)?
+                    } else {
+                        self.dense_ffn(layer, &t_ffn, buf)?
+                    };
+                    for i in 0..n_embd {
+                        x[i] += ff_out[i];
+                    }
+                }
+            }
+            if self.debug_checksums {
+                let s: f32 = x.iter().map(|v| v.abs()).sum();
+                eprintln!("L{layer} x_sum={s:.4}");
+            }
+        }
+        // final norm + logits
+        let onorm_t = self.t(TensorKind::OutputNorm, 0)?;
+        let w = onorm_t.rows(0, 1, buf)?;
+        // GPT-2 and Falcon use LayerNorm with bias for output_norm
+        let x =
+            if self.arch_variant == ArchVariant::GPT2 || self.arch_variant == ArchVariant::Falcon {
+                let b = self.bias_vec(0, TensorKind::OutputNormBias, n_embd, buf)?;
+                Self::layernorm(&x, &w, &b, self.eps as f32)
+            } else {
+                rmsnorm(&x, &w, self.eps as f32)
+            };
+        // GPT-2 and Falcon may tie output to token_embd when output.weight is absent
+        let out_t = match self.t(TensorKind::Output, 0) {
+            Ok(t) => t,
+            Err(_)
+                if self.arch_variant == ArchVariant::GPT2
+                    || self.arch_variant == ArchVariant::Falcon =>
+            {
+                self.t(TensorKind::TokenEmbedd, 0)?
+            }
+            Err(e) => return Err(e),
+        };
+        self.matvec(&out_t, &x, buf)
+    }
+    pub fn generate(
+        &self,
+        tokens: &[usize],
+        n_new: usize,
+    ) -> io::Result<(Vec<usize>, f64, Vec<(usize, f32)>)> {
+        let t0 = std::time::Instant::now();
+        let mut seq = tokens.to_vec();
+        let max_seq = tokens.len() + n_new;
+        let mut buf: Vec<u8> = Vec::with_capacity(262_144);
+        let mut logits = None;
+        // MLA uses latent KV cache sized by (kv_lora_rank + rope_dim) per position, MQA (1 KV group)
+        // Standard archs use MHA/GQA cache sized by n_kv_heads * head_dim
+        if self.arch_variant == ArchVariant::DeepSeek2 {
+            let mla_stride = self.n_lora_kv + self.rope_dim;
+            let mut mla_k_cache = vec![vec![0f32; max_seq * mla_stride]; self.n_layers];
+            for (pos, tok) in tokens.iter().enumerate() {
+                logits = Some(self.forward(*tok, pos, &mut mla_k_cache, &mut vec![], &mut buf)?);
+            }
+            for _ in 0..n_new.saturating_sub(1) {
+                let nxt = argmax(logits.as_ref().unwrap());
+                seq.push(nxt);
+                logits = Some(self.forward(
+                    nxt,
+                    seq.len() - 1,
+                    &mut mla_k_cache,
+                    &mut vec![],
+                    &mut buf,
+                )?);
+            }
+            seq.push(argmax(logits.as_ref().unwrap()));
+        } else {
+            let kv_stride = self.n_kv_heads * self.head_dim;
+            let mut k_cache = vec![vec![0f32; max_seq * kv_stride]; self.n_layers];
+            let mut v_cache = vec![vec![0f32; max_seq * kv_stride]; self.n_layers];
+            for (pos, tok) in tokens.iter().enumerate() {
+                logits = Some(self.forward(*tok, pos, &mut k_cache, &mut v_cache, &mut buf)?);
+            }
+            for _ in 0..n_new.saturating_sub(1) {
+                let nxt = argmax(logits.as_ref().unwrap());
+                seq.push(nxt);
+                logits =
+                    Some(self.forward(nxt, seq.len() - 1, &mut k_cache, &mut v_cache, &mut buf)?);
+            }
+            seq.push(argmax(logits.as_ref().unwrap()));
+        }
+        let dt = t0.elapsed().as_secs_f64();
+        let lg = logits.as_ref().unwrap();
+        let mut idx: Vec<usize> = (0..lg.len()).collect();
+        idx.sort_by(|a, b| lg[*b].partial_cmp(&lg[*a]).unwrap());
+        let top5: Vec<(usize, f32)> = idx.iter().take(5).map(|&i| (i, lg[i])).collect();
+        Ok((seq, dt, top5))
+    }
+
+    fn deepseek2_kq_scale_value(
+    rope_scaling_factor: f32,
+    rope_yarn_log_mul: f32,
+    rope_attn_factor: f32,
+    key_length_mla: f32,
+) -> f32 {
+    let log_inv_scale = (1.0f32 / rope_scaling_factor).ln();
+    let attn_factor_org =
+        rope_attn_factor * (1.0f32 + 0.1f32 * log_inv_scale);
+    let mscale =
+        attn_factor_org * (1.0f32 + 0.1f32 * rope_yarn_log_mul * log_inv_scale);
+    mscale * mscale / key_length_mla.sqrt()
+}
+
+    fn deepseek2_kq_scale(&self) -> f32 {
+        deepseek2_kq_scale_value(
+            self.rope_scaling_factor,
+            self.rope_yarn_log_mul,
+            self.rope_attn_factor,
+            self.key_length_mla as f32,
+        )
+    }
+}
+
+// ---- math helpers ----
+/// Per-head RMSNorm for QK-norm
+fn qk_norm_row(v: &[f32], w: &[f32], head_dim: usize, eps: f32) -> Vec<f32> {
+    let mut out = vec![0f32; v.len()];
+    for (h, chunk) in v.chunks(head_dim).enumerate() {
+        let w_slice = &w[h * head_dim..(h + 1) * head_dim];
+        let normed = rmsnorm(chunk, w_slice, eps);
+        for (o, n) in out[h * head_dim..(h + 1) * head_dim].iter_mut().zip(normed) {
+            *o = n;
+        }
+    }
+    out
+}
+fn rmsnorm(x: &[f32], w: &[f32], eps: f32) -> Vec<f32> {
+    let ss = x.iter().map(|v| v * v).sum::<f32>() / x.len() as f32;
+    let inv = 1.0 / (ss + eps).sqrt();
+    x.iter().zip(w).map(|(v, wi)| v * inv * wi).collect()
+}
+fn rope(x: &mut [f32], pos: usize, theta: f64) {
+    let d = x.len() / 2;
+    for i in 0..d {
+        let freq = theta.powf(-2.0 * i as f64 / (2.0 * d as f64));
+        let ang = pos as f64 * freq;
+        let (c, s) = (ang.cos() as f32, ang.sin() as f32);
+        let a = x[2 * i];
+        let b = x[2 * i + 1];
+        x[2 * i] = a * c - b * s;
+        x[2 * i + 1] = a * s + b * c;
+    }
+}
+fn softmax(x: &mut [f32]) -> Vec<f32> {
+    let max = x.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let sum: f32 = x.iter().map(|v| (v - max).exp()).sum();
+    x.iter().map(|v| (v - max).exp() / sum).collect()
+}
+fn top_k(v: &[f32], k: usize) -> Vec<usize> {
+    let mut idx: Vec<usize> = (0..v.len()).collect();
+    idx.sort_by(|a, b| v[*b].partial_cmp(&v[*a]).unwrap());
+    idx.truncate(k);
+    idx
+}
+fn argmax(v: &[f32]) -> usize {
+    let mut best = 0usize;
+    for (i, x) in v.iter().enumerate() {
+        if *x > v[best] {
+            best = i;
+        }
+    }
+    best
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gpt2_tensor_names() {
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::TokenEmbedd, 0),
+            "token_embd.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::PositionEmbedd, 0),
+            "pos_embd.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::AttnQ, 0),
+            "blk.0.attn_qkv.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::AttnK, 0),
+            "blk.0.attn_qkv.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::AttnV, 0),
+            "blk.0.attn_qkv.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::AttnQKVBias, 0),
+            "blk.0.attn_qkv.bias"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::AttnOutput, 0),
+            "blk.0.attn_output.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::AttnOutputBias, 0),
+            "blk.0.attn_output.bias"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::FfnUp, 0),
+            "blk.0.ffn_up.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::FfnUpBias, 0),
+            "blk.0.ffn_up.bias"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::FfnDown, 0),
+            "blk.0.ffn_down.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::FfnDownBias, 0),
+            "blk.0.ffn_down.bias"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::OutputNorm, 0),
+            "output_norm.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::GPT2, TensorKind::OutputNormBias, 0),
+            "output_norm.bias"
+        );
+    }
+
+    #[test]
+    fn test_gelu() {
+        assert!((Model::gelu(0.0) - 0.0).abs() < 1e-6);
+        assert!((Model::gelu(1.0) - 0.8411920071).abs() < 1e-9);
+        assert!((Model::gelu(-1.0) + 0.1588080227).abs() < 1e-9);
+        assert!((Model::gelu(2.0) - 1.9545977116).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_layernorm() {
+        let x = [1.0, 2.0, 3.0, 4.0];
+        let w = [1.0, 1.0, 1.0, 1.0];
+        let b = [0.0, 0.0, 0.0, 0.0];
+        let eps = 1e-5;
+        let y = Model::layernorm(&x, &w, &b, eps);
+        assert!((y[0] + 1.3416).abs() < 1e-4);
+        assert!((y[1] + 0.4472).abs() < 1e-4);
+        assert!((y[2] - 0.4472).abs() < 1e-4);
+        assert!((y[3] - 1.3416).abs() < 1e-4);
+    }
+
+    #[test]
+    fn test_arch_from_string_gpt2() {
+        assert_eq!(arch_from_string("gpt2"), ArchVariant::GPT2);
+    }
+
+    #[test]
+    fn test_arch_from_string_falcon() {
+        assert_eq!(arch_from_string("falcon"), ArchVariant::Falcon);
+        assert_eq!(arch_from_string("falcon-h1"), ArchVariant::Falcon);
+    }
+
+    #[test]
+    fn test_arch_from_string_deepseek2() {
+        assert_eq!(arch_from_string("deepseek2"), ArchVariant::DeepSeek2);
+    }
+
+    #[test]
+    fn test_deepseek2_tensor_names() {
+        let layer = 7;
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::TokenEmbedd, layer),
+            "token_embd.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::Output, layer),
+            "output.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::OutputNorm, layer),
+            "output_norm.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::AttnNorm, layer),
+            "blk.7.attn_norm.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::AttnQANorm, layer),
+            "blk.7.attn_q_a_norm.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::AttnQA, layer),
+            "blk.7.attn_q_a.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::AttnQB, layer),
+            "blk.7.attn_q_b.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::AttnKVAMQA, layer),
+            "blk.7.attn_kv_a_mqa.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::AttnKVANorm, layer),
+            "blk.7.attn_kv_a_norm.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::AttnKB, layer),
+            "blk.7.attn_k_b.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::AttnVB, layer),
+            "blk.7.attn_v_b.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::AttnOutput, layer),
+            "blk.7.attn_output.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::FfnNorm, layer),
+            "blk.7.ffn_norm.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::FfnGateInp, layer),
+            "blk.7.ffn_gate_inp.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::FfnUpExps, layer),
+            "blk.7.ffn_up_exps.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::FfnGateExps, layer),
+            "blk.7.ffn_gate_exps.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::FfnDownExps, layer),
+            "blk.7.ffn_down_exps.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::FfnGateShexp, layer),
+            "blk.7.ffn_gate_shexp.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::FfnUpShexp, layer),
+            "blk.7.ffn_up_shexp.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::FfnDownShexp, layer),
+            "blk.7.ffn_down_shexp.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::FfnExpProbsB, layer),
+            "blk.7.exp_probs_b.bias"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::DeepSeek2, TensorKind::AttnQ, layer),
+            "blk.7.attn_q.weight"
+        );
+    }
+
+    #[test]
+    fn test_falcon_tensor_names() {
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::TokenEmbedd, 0),
+            "token_embd.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::Output, 0),
+            "output.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::OutputNorm, 0),
+            "output_norm.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::OutputNormBias, 0),
+            "output_norm.bias"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::AttnNorm, 0),
+            "blk.0.attn_norm.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::AttnNormBias, 0),
+            "blk.0.attn_norm.bias"
+        );
+        // Fused QKV
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::AttnQ, 0),
+            "blk.0.attn_qkv.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::AttnK, 0),
+            "blk.0.attn_qkv.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::AttnV, 0),
+            "blk.0.attn_qkv.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::AttnOutput, 0),
+            "blk.0.attn_output.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::FfnUp, 0),
+            "blk.0.ffn_up.weight"
+        );
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::FfnDown, 0),
+            "blk.0.ffn_down.weight"
+        );
+        // Falcon has no separate ffn_norm — falls through to llama default
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::FfnNorm, 0),
+            "blk.0.ffn_norm.weight"
+        );
+        // Falcon has no FfnGate — falls through to llama default
+        assert_eq!(
+            tensor_name(ArchVariant::Falcon, TensorKind::FfnGate, 0),
+            "blk.0.ffn_gate.weight"
+        );
+    }
+}

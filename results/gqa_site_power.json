@@ -1,0 +1,419 @@
+{
+  "question": "is each of the seven GQA head-pairing sites individually load-bearing?",
+  "defect": "`let kv_h = h / kv_group;` -> `let kv_h = h % n_kv_heads;`, one site at a time",
+  "model_rs_md5_measured": "fe9d7d2a30297e824a717a0d82e8226c",
+  "model_rs_md5_live_tree": "fe9d7d2a30297e824a717a0d82e8226c",
+  "site_count": 7,
+  "baseline_failures": [],
+  "sites": [
+    {
+      "line": 1834,
+      "forward_pass": "forward_gemma3",
+      "find_lines": [
+        1832,
+        1834
+      ],
+      "find": "                let mut k2 = vec![0f32; qkv_width];\n                for h in 0..n_heads {\n                    let kv_h = h / kv_group;",
+      "verdict": "detected",
+      "worst_rel_l2_vs_float64": 0.5792,
+      "gated_architectures": [
+        "gemma3"
+      ],
+      "new_failures": [
+        "forward_matches_llama_cpp_logits"
+      ]
+    },
+    {
+      "line": 1846,
+      "forward_pass": "forward_gemma3",
+      "find_lines": [
+        1844,
+        1846
+      ],
+      "find": "                let mut v2 = vec![0f32; qkv_width];\n                for h in 0..n_heads {\n                    let kv_h = h / kv_group;",
+      "verdict": "detected",
+      "worst_rel_l2_vs_float64": 1.329,
+      "gated_architectures": [
+        "gemma3"
+      ],
+      "new_failures": [
+        "forward_matches_llama_cpp_logits"
+      ]
+    },
+    {
+      "line": 1881,
+      "forward_pass": "forward_gemma3",
+      "find_lines": [
+        1881,
+        1882
+      ],
+      "find": "                let kv_h = h / kv_group;\n                let mut scores = vec![0f32; attn_range];",
+      "verdict": "detected",
+      "worst_rel_l2_vs_float64": 0.9683,
+      "gated_architectures": [
+        "gemma3"
+      ],
+      "new_failures": [
+        "forward_matches_llama_cpp_logits"
+      ]
+    },
+    {
+      "line": 2045,
+      "forward_pass": "forward_k2_horizon",
+      "find_lines": [
+        2041,
+        2045
+      ],
+      "find": "            // Attention (reads from cache in n_kv_heads format, uses GQA group indexing)\n            let scale = 1.0 / (head_dim as f32).sqrt();\n            let mut att_out = vec![0f32; n_embd];\n            for h in 0..n_heads {\n                let kv_h = h / kv_group;",
+      "verdict": "MISSED",
+      "worst_rel_l2_vs_float64": null,
+      "gated_architectures": [],
+      "new_failures": []
+    },
+    {
+      "line": 2356,
+      "forward_pass": "forward",
+      "find_lines": [
+        2354,
+        2356
+      ],
+      "find": "                let mut k2 = vec![0f32; n_embd];\n                for h in 0..n_heads {\n                    let kv_h = h / kv_group;",
+      "verdict": "detected",
+      "worst_rel_l2_vs_float64": 0.2871,
+      "gated_architectures": [
+        "llama"
+      ],
+      "new_failures": [
+        "forward_matches_llama_cpp_logits",
+        "quantization_is_llama_cpp_s_own_sensitivity_not_a_bug"
+      ]
+    },
+    {
+      "line": 2368,
+      "forward_pass": "forward",
+      "find_lines": [
+        2366,
+        2368
+      ],
+      "find": "                let mut v2 = vec![0f32; n_embd];\n                for h in 0..n_heads {\n                    let kv_h = h / kv_group;",
+      "verdict": "detected",
+      "worst_rel_l2_vs_float64": 1.026,
+      "gated_architectures": [
+        "llama"
+      ],
+      "new_failures": [
+        "forward_matches_llama_cpp_logits",
+        "quantization_is_llama_cpp_s_own_sensitivity_not_a_bug"
+      ]
+    },
+    {
+      "line": 2427,
+      "forward_pass": "forward",
+      "find_lines": [
+        2423,
+        2427
+      ],
+      "find": "            // attention over cached keys\n            let scale = 1.0 / (head_dim as f32).sqrt();\n            let mut att_out = vec![0f32; n_embd];\n            for h in 0..n_heads {\n                let kv_h = h / kv_group;",
+      "verdict": "detected",
+      "worst_rel_l2_vs_float64": 0.9943,
+      "gated_architectures": [
+        "llama"
+      ],
+      "new_failures": [
+        "forward_matches_llama_cpp_logits",
+        "quantization_is_llama_cpp_s_own_sensitivity_not_a_bug"
+      ]
+    }
+  ],
+  "uncovered_sites": [
+    2045
+  ],
+  "gguf_geometries": [
+    {
+      "file": "OLMoE-1B-7B-Instruct-Q4_K_M.gguf",
+      "arch": "olmoe",
+      "n_head": 16,
+      "n_head_kv": 16,
+      "n_rep": 1,
+      "gqa": false,
+      "forward": "?"
+    },
+    {
+      "file": "Tiny-Moe.Q4_K_M.gguf",
+      "arch": "llama",
+      "n_head": 12,
+      "n_head_kv": 12,
+      "n_rep": 1,
+      "gqa": false,
+      "forward": "forward"
+    },
+    {
+      "file": "qwen2.5-3b-instruct-q4_k_m.gguf",
+      "arch": "qwen2",
+      "n_head": 16,
+      "n_head_kv": 2,
+      "n_rep": 8,
+      "gqa": true,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-deepseek2-mla.gguf",
+      "arch": "deepseek2",
+      "n_head": 2,
+      "n_head_kv": 2,
+      "n_rep": 1,
+      "gqa": false,
+      "forward": "forward_deepseek2"
+    },
+    {
+      "file": "synthetic-gemma3.gguf",
+      "arch": "gemma3",
+      "n_head": 4,
+      "n_head_kv": 2,
+      "n_rep": 2,
+      "gqa": true,
+      "forward": "forward_gemma3"
+    },
+    {
+      "file": "synthetic-gpt2-strip.gguf",
+      "arch": "gpt2",
+      "n_head": 8,
+      "n_head_kv": 8,
+      "n_rep": 1,
+      "gqa": false,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-gpt2.gguf",
+      "arch": "gpt2",
+      "n_head": 8,
+      "n_head_kv": 8,
+      "n_rep": 1,
+      "gqa": false,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-llama.gguf",
+      "arch": "llama",
+      "n_head": 8,
+      "n_head_kv": 2,
+      "n_rep": 4,
+      "gqa": true,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-qwen2.gguf",
+      "arch": "qwen2",
+      "n_head": 8,
+      "n_head_kv": 2,
+      "n_rep": 4,
+      "gqa": true,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-deepseek2-fused.gguf",
+      "arch": "deepseek2",
+      "n_head": 4,
+      "n_head_kv": 1,
+      "n_rep": 4,
+      "gqa": false,
+      "forward": "forward_deepseek2"
+    },
+    {
+      "file": "synthetic-deepseek2-normw.gguf",
+      "arch": "deepseek2",
+      "n_head": 4,
+      "n_head_kv": 1,
+      "n_rep": 4,
+      "gqa": false,
+      "forward": "forward_deepseek2"
+    },
+    {
+      "file": "synthetic-deepseek2.gguf",
+      "arch": "deepseek2",
+      "n_head": 4,
+      "n_head_kv": 1,
+      "n_rep": 4,
+      "gqa": false,
+      "forward": "forward_deepseek2"
+    },
+    {
+      "file": "synthetic-gemma3.gguf",
+      "arch": "gemma3",
+      "n_head": 4,
+      "n_head_kv": 2,
+      "n_rep": 2,
+      "gqa": true,
+      "forward": "forward_gemma3"
+    },
+    {
+      "file": "synthetic-gpt2.gguf",
+      "arch": "gpt2",
+      "n_head": 8,
+      "n_head_kv": 8,
+      "n_rep": 1,
+      "gqa": false,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-llama-moe-wscale.gguf",
+      "arch": "llama",
+      "n_head": 4,
+      "n_head_kv": 2,
+      "n_rep": 2,
+      "gqa": true,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-llama-moe.gguf",
+      "arch": "llama",
+      "n_head": 4,
+      "n_head_kv": 2,
+      "n_rep": 2,
+      "gqa": true,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-llama-q4_0-f32.gguf",
+      "arch": "llama",
+      "n_head": 8,
+      "n_head_kv": 2,
+      "n_rep": 4,
+      "gqa": true,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-llama-q4_0.gguf",
+      "arch": "llama",
+      "n_head": 8,
+      "n_head_kv": 2,
+      "n_rep": 4,
+      "gqa": true,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-llama.gguf",
+      "arch": "llama",
+      "n_head": 8,
+      "n_head_kv": 2,
+      "n_rep": 4,
+      "gqa": true,
+      "forward": "forward"
+    },
+    {
+      "file": "synthetic-qwen2.gguf",
+      "arch": "qwen2",
+      "n_head": 8,
+      "n_head_kv": 2,
+      "n_rep": 4,
+      "gqa": true,
+      "forward": "forward"
+    }
+  ],
+  "gqa_ggufs_by_forward": {
+    "forward": [
+      {
+        "file": "qwen2.5-3b-instruct-q4_k_m.gguf",
+        "arch": "qwen2",
+        "n_head": 16,
+        "n_head_kv": 2,
+        "n_rep": 8,
+        "gqa": true,
+        "forward": "forward"
+      },
+      {
+        "file": "synthetic-llama.gguf",
+        "arch": "llama",
+        "n_head": 8,
+        "n_head_kv": 2,
+        "n_rep": 4,
+        "gqa": true,
+        "forward": "forward"
+      },
+      {
+        "file": "synthetic-qwen2.gguf",
+        "arch": "qwen2",
+        "n_head": 8,
+        "n_head_kv": 2,
+        "n_rep": 4,
+        "gqa": true,
+        "forward": "forward"
+      },
+      {
+        "file": "synthetic-llama-moe-wscale.gguf",
+        "arch": "llama",
+        "n_head": 4,
+        "n_head_kv": 2,
+        "n_rep": 2,
+        "gqa": true,
+        "forward": "forward"
+      },
+      {
+        "file": "synthetic-llama-moe.gguf",
+        "arch": "llama",
+        "n_head": 4,
+        "n_head_kv": 2,
+        "n_rep": 2,
+        "gqa": true,
+        "forward": "forward"
+      },
+      {
+        "file": "synthetic-llama-q4_0-f32.gguf",
+        "arch": "llama",
+        "n_head": 8,
+        "n_head_kv": 2,
+        "n_rep": 4,
+        "gqa": true,
+        "forward": "forward"
+      },
+      {
+        "file": "synthetic-llama-q4_0.gguf",
+        "arch": "llama",
+        "n_head": 8,
+        "n_head_kv": 2,
+        "n_rep": 4,
+        "gqa": true,
+        "forward": "forward"
+      },
+      {
+        "file": "synthetic-llama.gguf",
+        "arch": "llama",
+        "n_head": 8,
+        "n_head_kv": 2,
+        "n_rep": 4,
+        "gqa": true,
+        "forward": "forward"
+      },
+      {
+        "file": "synthetic-qwen2.gguf",
+        "arch": "qwen2",
+        "n_head": 8,
+        "n_head_kv": 2,
+        "n_rep": 4,
+        "gqa": true,
+        "forward": "forward"
+      }
+    ],
+    "forward_gemma3": [
+      {
+        "file": "synthetic-gemma3.gguf",
+        "arch": "gemma3",
+        "n_head": 4,
+        "n_head_kv": 2,
+        "n_rep": 2,
+        "gqa": true,
+        "forward": "forward_gemma3"
+      },
+      {
+        "file": "synthetic-gemma3.gguf",
+        "arch": "gemma3",
+        "n_head": 4,
+        "n_head_kv": 2,
+        "n_rep": 2,
+        "gqa": true,
+        "forward": "forward_gemma3"
+      }
+    ]
+  },
+  "note": "A site is only observable if a GGUF that reaches its forward pass has a grouped-query geometry: for MHA (n_head_kv == n_head) the expansion branches are short-circuited and `h / 1 == h % n_head == h`, so the mutation is a no-op by construction. `n_head_kv == 1` is likewise a coincidence, not coverage."
+}

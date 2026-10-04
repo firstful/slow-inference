@@ -1,0 +1,5 @@
+# phi3.gguf does not load. Recorded because a rule that cannot
+# execute is a different thing from a rule that has not been
+# implemented, and only this file says which one it is.
+LOAD_FAILED
+llama_model_load: error loading model: error loading model vocabulary: unordered_map::at

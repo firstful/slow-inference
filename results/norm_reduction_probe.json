@@ -1,0 +1,111 @@
+{
+  "what": "engine/tools/probe_norm.c: which of four LayerNorm reduction shapes is llama.cpp's",
+  "llama_cpp": "3653e6d",
+  "reference_functions": {
+    "op": "ggml_compute_forward_norm_f32 (ggml/src/ggml-cpu/ops.cpp:3698)",
+    "mean": "ggml_vec_sum_f32 (vec.h:1495) -- sequential ggml_float accumulator, narrowed to float on the way out, then divided in f32 (ops.cpp:3728)",
+    "variance": "ggml_vec_cvar_f32 (vec.cpp:455) -- ggml_float accumulator fed ONE f32 per group of 8 by a horizontal tree (vextractf128+vaddps, vmovhlps+vaddps, vmovshdup+vaddss), scalar tail; the return is a double divided by n in double and narrowed by the caller",
+    "branch": "AVX2+FMA, read from the disassembly of libggml-cpu.so, not from CMakeCache.txt",
+    "correction": "the note this replaces claimed both reductions are ggml_float accumulations because 'ggml_vec_norm_f32 accumulates into a ggml_float'. At 3653e6d ggml_vec_norm_f32 is a one-line call to ggml_vec_dot_f32, ggml_vec_rmsnorm_f32 does not exist, and neither is what LayerNorm calls."
+  },
+  "golden": {
+    "path": "engine/tests/data/norm_golden.bin",
+    "bytes": 638124,
+    "sha256": "66114beef27aef76318f47a36c45752236e06e9859b9f77fd7e32b93b22827e4",
+    "lengths": 34,
+    "cases": 130,
+    "seed": 20260930,
+    "eps": 1e-05,
+    "format": "SLNRMGLD u32 version=1 u32 ncases f32 eps; per case u32 ne0, f32 x[], f32 w[], f32 b[], f32 mean, f32 var, f32 y[]",
+    "self_check": "the tool refuses to write unless (x-mean)*scale*w+b reproduces the graph's output bit for bit at every element, which makes the mean and var columns the kernel's own values rather than a story about them"
+  },
+  "end_to_end_gpt2_fixture": {
+    "note": "synthetic-gpt2 is 2 layers of 64, the only fixture that reaches LayerNorm at all",
+    "prompt": [
+      3,
+      17,
+      42,
+      99,
+      7,
+      61,
+      127,
+      24
+    ],
+    "positions": 8,
+    "vocab": 128,
+    "old_sequential_f32": {
+      "vs_llama_cpp_ref": {
+        "worst_rel_l2": 0.00031048,
+        "mean_rel_l2": 0.00025393,
+        "min_cos": 1.0,
+        "argmax": "8/8"
+      },
+      "vs_float64_ref": {
+        "worst_rel_l2": 3.6797e-07,
+        "mean_rel_l2": 2.6952e-07,
+        "min_cos": 1.0,
+        "argmax": "8/8"
+      }
+    },
+    "new_ggml_norm": {
+      "vs_llama_cpp_ref": {
+        "worst_rel_l2": 0.00031054,
+        "mean_rel_l2": 0.00025399,
+        "min_cos": 1.0,
+        "argmax": "8/8"
+      },
+      "vs_float64_ref": {
+        "worst_rel_l2": 3.1939e-07,
+        "mean_rel_l2": 2.4252e-07,
+        "min_cos": 1.0,
+        "argmax": "8/8"
+      }
+    },
+    "build_vs_build": {
+      "worst_rel_l2": 3.7617e-07,
+      "max_abs_logit_delta": 9.5367e-07,
+      "elements_changed": "910/1024"
+    },
+    "reading": "every output element is now bit-identical to the kernel and 910 of 1024 logits changed, yet the float64 gate moved 3.68e-07 -> 3.19e-07 (1.15x) and the llama.cpp gate moved the WRONG way by 2e-8, because that reference is 3e-4 away from exact on the f16 GELU table. Third time the green suite has been blind to a real arithmetic defect; the pin is tests/norm_golden.rs, not a tolerance."
+  },
+  "suite_blindness": {
+    "gate": "tests/ref_parity.rs F64_REL_L2 = 1e-5",
+    "old": 3.6797e-07,
+    "new": 3.1939e-07,
+    "verdict": "both are ~30x below the gate; the suite cannot tell 100% bit-exactness from 62% wrong"
+  },
+  "mutations_added": [
+    {
+      "name": "layernorm_mean_back_to_sequential_f32",
+      "verdict": "detected",
+      "by": "ggml_layernorm_is_bit_identical_to_the_reference_kernel, ggml_norm::tests::the_variance_divides_in_f64_and_trees_above_seven, the_old_reduction_and_the_obvious_fix_are_both_not_the_kernel"
+    },
+    {
+      "name": "layernorm_mean_narrowed_late",
+      "verdict": "detected",
+      "by": "ggml_layernorm_is_bit_identical_to_the_reference_kernel, ggml_norm::tests::the_mean_divides_in_f32_not_in_f64"
+    },
+    {
+      "name": "layernorm_variance_fell_back_to_the_scalar_tail",
+      "verdict": "detected",
+      "by": "ggml_layernorm_is_bit_identical_to_the_reference_kernel, ggml_norm::tests::the_variance_divides_in_f64_and_trees_above_seven"
+    },
+    {
+      "name": "layernorm_variance_transcribed_from_the_sse2_branch",
+      "verdict": "detected",
+      "by": "ggml_layernorm_is_bit_identical_to_the_reference_kernel, ggml_norm::tests::the_variance_divides_in_f64_and_trees_above_seven"
+    }
+  ],
+  "mutation_harness_bugs_found_by_running_it": [
+    "layernorm_mean_divided_in_f64 (first draft) widened the already-narrowed f32 and divided in f64 -- harmless double rounding, so the suite correctly reported MISSED. The real defect is narrowing AFTER the division, which is the entry that stands.",
+    "layernorm_variance_group_of_four (first draft) changed CVAR_EPR to 4, which does not compile because the tree indexes sq[4..8] out of a [f32; 4]. NO BUILD demonstrates nothing; replaced with a same-length SSE2-shaped tree."
+  ],
+  "raw": {
+    "synthetic_gauss": "# probe_norm /home/reeds/slow-inference/models/synthetic-gpt2.gguf\n# seed=42 act=gauss eps=1e-05\n# llama.cpp 3653e6d, LayerNorm = ggml_compute_forward_norm_f32 (ops.cpp:3698)\n#   mean = ggml_vec_sum_f32  (vec.h:1495) -- sequential ggml_float, no tree\n#   var  = ggml_vec_cvar_f32 (vec.cpp:455) -- ggml_float accumulator fed ONE f32\n#                                       per group of 8 by a horizontal tree\n# runtime CPU features as the LOADED ggml sees them:\n#   avx=1 avx2=1 avx512=0 fma=1\n#   => cvar branch predicted: AVX2+FMA (8-wide)\n#   that only predicts it. The bitwise column decides.\n\n## synthetic activation: gauss\n\n34 lengths, 130 rows, eps=1e-05\ndecomposition check  (x-mean)*scale*w+b  ==  graph output:  0 element(s) differ\n\nscheme      mean wrong    var wrong    y bits differ     y max|err|       y rel L2\nseq_f32       82/130       86/130       24872/39784       4.292e-06      4.977e-09\nf64_seq        0/130       13/130          64/39784       4.768e-07      5.530e-10\ncvar_f32      82/130        9/130        6744/39784       9.537e-07      1.106e-09\ncvar_f64       0/130        0/130           0/39784       0.000e+00      0.000e+00\n\ncounts are rows out of 130, and output elements out of 39784;\n y max|err| is absolute and the outputs are O(1) after weight and bias,\n so one f32 ulp here is about 1.2e-7 and no row is a tolerance question.\n",
+    "synthetic_uniform": "# probe_norm /home/reeds/slow-inference/models/synthetic-gpt2.gguf\n# seed=42 act=uniform eps=1e-05\n# llama.cpp 3653e6d, LayerNorm = ggml_compute_forward_norm_f32 (ops.cpp:3698)\n#   mean = ggml_vec_sum_f32  (vec.h:1495) -- sequential ggml_float, no tree\n#   var  = ggml_vec_cvar_f32 (vec.cpp:455) -- ggml_float accumulator fed ONE f32\n#                                       per group of 8 by a horizontal tree\n# runtime CPU features as the LOADED ggml sees them:\n#   avx=1 avx2=1 avx512=0 fma=1\n#   => cvar branch predicted: AVX2+FMA (8-wide)\n#   that only predicts it. The bitwise column decides.\n\n## synthetic activation: uniform\n\n34 lengths, 130 rows, eps=1e-05\ndecomposition check  (x-mean)*scale*w+b  ==  graph output:  0 element(s) differ\n\nscheme      mean wrong    var wrong    y bits differ     y max|err|       y rel L2\nseq_f32       85/130       81/130       28063/39784       1.431e-06      2.710e-09\nf64_seq        0/130       13/130          66/39784       2.384e-07      4.517e-10\ncvar_f32      85/130        9/130        5108/39784       4.768e-07      9.034e-10\ncvar_f64       0/130        0/130           0/39784       0.000e+00      0.000e+00\n\ncounts are rows out of 130, and output elements out of 39784;\n y max|err| is absolute and the outputs are O(1) after weight and bias,\n so one f32 ulp here is about 1.2e-7 and no row is a tolerance question.\n",
+    "synthetic_heavy": "# probe_norm /home/reeds/slow-inference/models/synthetic-gpt2.gguf\n# seed=42 act=heavy eps=1e-05\n# llama.cpp 3653e6d, LayerNorm = ggml_compute_forward_norm_f32 (ops.cpp:3698)\n#   mean = ggml_vec_sum_f32  (vec.h:1495) -- sequential ggml_float, no tree\n#   var  = ggml_vec_cvar_f32 (vec.cpp:455) -- ggml_float accumulator fed ONE f32\n#                                       per group of 8 by a horizontal tree\n# runtime CPU features as the LOADED ggml sees them:\n#   avx=1 avx2=1 avx512=0 fma=1\n#   => cvar branch predicted: AVX2+FMA (8-wide)\n#   that only predicts it. The bitwise column decides.\n\n## synthetic activation: heavy\n\n34 lengths, 130 rows, eps=1e-05\ndecomposition check  (x-mean)*scale*w+b  ==  graph output:  0 element(s) differ\n\nscheme      mean wrong    var wrong    y bits differ     y max|err|       y rel L2\nseq_f32       88/130       84/130       25364/39784       9.537e-06      1.807e-08\nf64_seq        0/130       16/130         799/39784       9.537e-07      1.807e-09\ncvar_f32      88/130       12/130        5458/39784       9.537e-07      1.807e-09\ncvar_f64       0/130        0/130           0/39784       0.000e+00      0.000e+00\n\ncounts are rows out of 130, and output elements out of 39784;\n y max|err| is absolute and the outputs are O(1) after weight and bias,\n so one f32 ulp here is about 1.2e-7 and no row is a tolerance question.\n",
+    "real_activation_qwen2.5-3b_f32": "# probe_norm /home/reeds/wide/qwen2.5-3b-f32.gguf\n# seed=42 act=emb:151646 eps=1e-05\n# llama.cpp 3653e6d, LayerNorm = ggml_compute_forward_norm_f32 (ops.cpp:3698)\n#   mean = ggml_vec_sum_f32  (vec.h:1495) -- sequential ggml_float, no tree\n#   var  = ggml_vec_cvar_f32 (vec.cpp:455) -- ggml_float accumulator fed ONE f32\n#                                       per group of 8 by a horizontal tree\n# runtime CPU features as the LOADED ggml sees them:\n#   avx=1 avx2=1 avx512=0 fma=1\n#   => cvar branch predicted: AVX2+FMA (8-wide)\n#   that only predicts it. The bitwise column decides.\n\n## real activation: 256 rows of token_embd.weight (ne0=2048) -- the input to\n## block 0's LayerNorm. w and b are synthetic, since what is being measured\n## is the reduction and not the weights.\n\n1 lengths, 256 rows, eps=1e-05\ndecomposition check  (x-mean)*scale*w+b  ==  graph output:  0 element(s) differ\n\nscheme      mean wrong    var wrong    y bits differ     y max|err|       y rel L2\nseq_f32      247/256      246/256      324649/524288      5.722e-06      1.823e-09\nf64_seq        0/256        6/256        2319/524288      1.431e-06      4.558e-10\ncvar_f32     247/256        6/256       67598/524288      1.431e-06      4.558e-10\ncvar_f64       0/256        0/256           0/524288      0.000e+00      0.000e+00\n\ncounts are rows out of 256, and output elements out of 524288;\n y max|err| is absolute and the outputs are O(1) after weight and bias,\n so one f32 ulp here is about 1.2e-7 and no row is a tolerance question.\n",
+    "real_activation_synthetic-gpt2": "# probe_norm /home/reeds/slow-inference/models/synthetic-gpt2.gguf\n# seed=42 act=emb:100 eps=1e-05\n# llama.cpp 3653e6d, LayerNorm = ggml_compute_forward_norm_f32 (ops.cpp:3698)\n#   mean = ggml_vec_sum_f32  (vec.h:1495) -- sequential ggml_float, no tree\n#   var  = ggml_vec_cvar_f32 (vec.cpp:455) -- ggml_float accumulator fed ONE f32\n#                                       per group of 8 by a horizontal tree\n# runtime CPU features as the LOADED ggml sees them:\n#   avx=1 avx2=1 avx512=0 fma=1\n#   => cvar branch predicted: AVX2+FMA (8-wide)\n#   that only predicts it. The bitwise column decides.\n\n## real activation: 64 rows of token_embd.weight (ne0=64) -- the input to\n## block 0's LayerNorm. w and b are synthetic, since what is being measured\n## is the reduction and not the weights.\n\n1 lengths, 64 rows, eps=1e-05\ndecomposition check  (x-mean)*scale*w+b  ==  graph output:  0 element(s) differ\n\nscheme      mean wrong    var wrong    y bits differ     y max|err|       y rel L2\nseq_f32       57/64        45/64         1198/4096        9.537e-07      3.562e-09\nf64_seq        0/64         8/64           71/4096        4.768e-07      1.781e-09\ncvar_f32      57/64         8/64          736/4096        4.768e-07      1.781e-09\ncvar_f64       0/64         0/64            0/4096        0.000e+00      0.000e+00\n\ncounts are rows out of 64, and output elements out of 4096;\n y max|err| is absolute and the outputs are O(1) after weight and bias,\n so one f32 ulp here is about 1.2e-7 and no row is a tolerance question.\n",
+    "shape_scan_ne0_1_to_72": "# probe_norm /home/reeds/slow-inference/models/synthetic-qwen2.gguf\n# seed=42 act=heavy eps=1e-05\n# llama.cpp 3653e6d, LayerNorm = ggml_compute_forward_norm_f32 (ops.cpp:3698)\n#   mean = ggml_vec_sum_f32  (vec.h:1495) -- sequential ggml_float, no tree\n#   var  = ggml_vec_cvar_f32 (vec.cpp:455) -- ggml_float accumulator fed ONE f32\n#                                       per group of 8 by a horizontal tree\n# runtime CPU features as the LOADED ggml sees them:\n#   avx=1 avx2=1 avx512=0 fma=1\n#   => cvar branch predicted: AVX2+FMA (8-wide)\n#   that only predicts it. The bitwise column decides.\n# shape scan ne0 = 1..72, one row each, eps=1e-05\n# ne0    mean/var (s=seq_f32 c=cvar_f64)   seq_f32   f64_seq  cvar_f32  cvar_f64   [y bits differing]\n1       ..         0         0         0  ..         0\n2       ..         0         0         0  ..         0\n3       ..         0         0         0  ..         0\n4       .V         0         0         0  ..         0\n5       .V         3         0         0  ..         0\n6       ..         0         0         0  ..         0\n7       ..         0         0         0  ..         0\n8       M.         7         0         7  ..         0\n9       ..         0         0         0  ..         0\n10      MV         7         0         7  ..         0\n11      M.         3         0         3  ..         0\n12      M.         3         0         3  ..         0\n13      MV         8         0        11  ..         0\n14      MV        10         0        10  ..         0\n15      M.         6         0         6  ..         0\n16      M.         0         0         0  ..         0\n17      MV         3         0         3  ..         0\n18      MV         8         8         4  ..         0\n19      MV         9        10         5  ..         0\n20      MV         5         0         5  ..         0\n21      ..         0         0         0  ..         0\n22      MV         4         0         4  ..         0\n23      .V        11        11         0  ..         0\n24      M.         3         8         3  ..         0\n25      MV         4         0         4  ..         0\n26      M.        20         0        20  ..         0\n27      MV        12         0         1  ..         0\n28      ..         0         0         0  ..         0\n29      ..         0         0         0  ..         0\n30      MV         4         0         4  ..         0\n31      M.         1         0         1  ..         0\n32      ..         0         0         0  ..         0\n33      ..         0         0         0  ..         0\n34      .V         0         0         0  ..         0\n35      .V        20         0         0  ..         0\n36      M.         1         0         1  ..         0\n37      M.         4         0         4  ..         0\n38      .V        24         0         0  ..         0\n39      ..         0         0         0  ..         0\n40      M.         0         0         0  ..         0\n41      MV        21        20        21  ..         0\n42      MV        19         0        10  ..         0\n43      MV        23         0         9  ..         0\n44      MV        19         0         2  ..         0\n45      M.        18         0        18  ..         0\n46      .V        25         0         0  ..         0\n47      MV        28         0         4  ..         0\n48      M.         3         0         3  ..         0\n49      MV        17         0         2  ..         0\n50      MV        20         0         4  ..         0\n51      MV        12         0        12  ..         0\n52      MV        28         0         0  ..         0\n53      MV         3         0         3  ..         0\n54      M.         7         0         7  ..         0\n55      MV        22        21         1  ..         0\n56      MV         7         0         7  ..         0\n57      M.         4         0         4  ..         0\n58      .V         0         0         0  ..         0\n59      MV        16         0        30  ..         0\n60      MV        33         0         6  ..         0\n61      .V        36         0         0  ..         0\n62      ..         0         0         0  ..         0\n63      MV        24         0        19  ..         0\n64      MV        26         0         3  ..         0\n65      M.        14         0        14  ..         0\n66      MV        34         0        21  ..         0\n67      M.         5         0         5  ..         0\n68      ..         0         0         0  ..         0\n69      MV        11         0        11  ..         0\n70      MV        24         0        24  ..         0\n71      .V         0         0         0  ..         0\n72      MV        48         0         3  ..         0\n# total y bits differing over ne0=1..72:\n#   seq_f32   727\n#   f64_seq   78\n#   cvar_f32  349\n#   cvar_f64  0\n"
+  }
+}

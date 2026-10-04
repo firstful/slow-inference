@@ -1,0 +1,451 @@
+use slow_inference::gguf;
+use slow_inference::model;
+use slow_inference::rss;
+
+use std::collections::HashMap;
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let mut model_path = String::new();
+    let mut prompt = String::from("The capital of France is");
+    let mut n_tokens = 8usize;
+    let mut raw_ids: Option<Vec<usize>> = None;
+    let mut json_output = false;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--model" => {
+                i += 1;
+                model_path = args[i].clone();
+            }
+            "--prompt" => {
+                i += 1;
+                prompt = args[i].clone();
+            }
+            "--tokens" => {
+                i += 1;
+                n_tokens = args[i].parse().unwrap();
+            }
+            "--prompt-tokens" => {
+                i += 1;
+                raw_ids = Some(
+                    args[i]
+                        .split(',')
+                        .map(|s| s.trim().parse().unwrap())
+                        .collect(),
+                );
+            }
+            "--json" => {
+                json_output = true;
+            }
+            "--list-architectures" => {
+                eprintln!("Supported GGUF architectures:");
+                for arch in model::supported_architectures() {
+                    eprintln!("  {arch}");
+                }
+                return;
+            }
+            "--dtype" => {
+                // Print per-layer dtype report and exit. Must have --model first.
+                let m = model::Model::open(&model_path).unwrap();
+                m.report_dtypes();
+                return;
+            }
+            other => panic!("unknown arg {other}"),
+        }
+        i += 1;
+    }
+    if model_path.is_empty() {
+        eprintln!(
+            "usage: slow-inference --model <gguf> [--prompt \"...\"] [--tokens N] [--json] [--list-architectures] [--dtype]"
+        );
+        std::process::exit(1);
+    }
+
+    let file_size = std::fs::metadata(&model_path).unwrap().len();
+    println!("model: {model_path} ({:.2} GB)", file_size as f64 / 1e9);
+
+    let m = model::Model::open(&model_path).unwrap();
+    println!(
+        "arch={} layers={} embd={} heads={} kv={} ff={} experts={}x{} qk_norm={} bias={}",
+        m.arch,
+        m.n_layers,
+        m.n_embd,
+        m.n_heads,
+        m.n_kv_heads,
+        m.n_ff,
+        m.n_experts,
+        m.n_experts_used,
+        m.qk_norm,
+        m.has_bias
+    );
+
+    // tokenizer: GPT2-style byte-level BPE if merges exist, else SPM (llama vocab)
+    let vocab = load_vocab(&m.gf.metadata);
+    let merges = load_merges(&m.gf.metadata);
+    let is_spm =
+        m.gf.metadata
+            .get("tokenizer.ggml.model")
+            .is_some_and(|v| v.as_str() == Some("llama"));
+    let prompt_ids = match raw_ids {
+        Some(ids) => ids,
+        None if is_spm => spm::encode(&prompt, &vocab),
+        None => encode(&prompt, &vocab, &merges),
+    };
+    println!("prompt ids: {prompt_ids:?}");
+
+    let mut parity_logits = None;
+    if json_output && !prompt_ids.is_empty() {
+        let mut k_cache: Vec<Vec<f32>>;
+        let mut v_cache: Vec<Vec<f32>>;
+        if m.arch_variant == model::ArchVariant::DeepSeek2 {
+            // MLA cache: each layer stores [kv_cmpr | k_pe] per position
+            let mla_stride = m.n_lora_kv + m.rope_dim;
+            k_cache = vec![vec![0.0; mla_stride]; m.n_layers];
+            v_cache = vec![vec![]; m.n_layers];
+        } else {
+            let stride = m.n_kv_heads * m.head_dim;
+            k_cache = vec![vec![0.0; stride]; m.n_layers];
+            v_cache = vec![vec![0.0; stride]; m.n_layers];
+        }
+        let mut buf = Vec::with_capacity(262_144);
+        parity_logits = Some(
+            m.forward(prompt_ids[0], 0, &mut k_cache, &mut v_cache, &mut buf)
+                .expect("forward for parity logits"),
+        );
+    }
+
+    let (seq, dt, top5) = m.generate(&prompt_ids, n_tokens).unwrap();
+
+    let table = byte_unicode();
+    let out = if is_spm {
+        spm::decode(&seq[prompt_ids.len()..], &vocab)
+    } else {
+        decode_ids(&seq[prompt_ids.len()..], &vocab, &table)
+    };
+    println!("output tokens: {:?}", &seq[prompt_ids.len()..]);
+    println!("output text: {out:?}");
+    if !top5.is_empty() {
+        println!("top5: {top5:?}");
+    }
+    println!(
+        "time: {dt:.1}s for {n_tokens} tokens ({:.1} s/token)",
+        dt / n_tokens as f64
+    );
+
+    let peak = rss::peak_rss_kib();
+    let cur = rss::current_rss_kib();
+    println!(
+        "peak RSS: {} = {:.2}% of model file",
+        rss::fmt(peak),
+        100.0 * (peak * 1024) as f64 / file_size as f64
+    );
+    println!("current RSS: {}", rss::fmt(cur));
+    if json_output {
+        let mut payload = serde_json::Map::new();
+        payload.insert(
+            "fixture".to_string(),
+            serde_json::Value::String(model_path.clone()),
+        );
+        payload.insert(
+            "prompt_ids".to_string(),
+            serde_json::Value::Array(
+                prompt_ids
+                    .iter()
+                    .map(|&v| serde_json::Value::Number(serde_json::Number::from(v)))
+                    .collect(),
+            ),
+        );
+        payload.insert(
+            "gen_seq".to_string(),
+            serde_json::Value::Array(
+                seq.iter()
+                    .map(|&v| serde_json::Value::Number(serde_json::Number::from(v)))
+                    .collect(),
+            ),
+        );
+        payload.insert(
+            "gen_top5".to_string(),
+            serde_json::Value::Array(
+                top5.iter()
+                    .map(|(id, v)| {
+                        serde_json::Value::Array(vec![
+                            serde_json::Value::Number(serde_json::Number::from(*id)),
+                            serde_json::Number::from_f64(*v as f64)
+                                .map_or(serde_json::Value::Null, serde_json::Value::Number),
+                        ])
+                    })
+                    .collect(),
+            ),
+        );
+        if let Some(ref logits) = parity_logits {
+            payload.insert(
+                "logits_token0_pos0".to_string(),
+                serde_json::Value::Array(
+                    logits
+                        .iter()
+                        .map(|&v| {
+                            serde_json::Value::Number(
+                                serde_json::Number::from_f64(v as f64).unwrap(),
+                            )
+                        })
+                        .collect(),
+                ),
+            );
+        }
+        println!("ENGINEJSON {}", serde_json::to_string(&payload).unwrap());
+    }
+}
+
+/// (token string, id) pairs — ids are positions in tokenizer.ggml.tokens
+type Vocab = Vec<(String, usize)>;
+
+fn load_vocab(md: &HashMap<String, gguf::Value>) -> Vocab {
+    let tokens = md
+        .get("tokenizer.ggml.tokens")
+        .and_then(|v| v.as_vec_str())
+        .expect("no tokenizer.ggml.tokens");
+    tokens
+        .into_iter()
+        .enumerate()
+        .map(|(i, s)| (s.to_string(), i))
+        .collect()
+}
+
+/// BPE merge rules from tokenizer.ggml.merges: "left right" -> rank.
+/// Returns empty map if the model has no merges (SPM-style vocab).
+fn load_merges(md: &HashMap<String, gguf::Value>) -> HashMap<(String, String), usize> {
+    let raw = md
+        .get("tokenizer.ggml.merges")
+        .and_then(|v| v.as_vec_str())
+        .unwrap_or_default();
+    raw.into_iter()
+        .enumerate()
+        .map(|(rank, m)| {
+            let mut it = m.splitn(2, ' ');
+            let l = it.next().unwrap_or("").to_string();
+            let r = it.next().unwrap_or("").to_string();
+            ((l, r), rank)
+        })
+        .collect()
+}
+
+/// GPT-2 byte-level unicode mapping: each byte 0..256 -> a printable char.
+/// (The classic bytes_to_unicode table, computed.)
+fn byte_unicode() -> [char; 256] {
+    let mut table = ['\0'; 256];
+    let mut n = 0u32;
+    let printable =
+        |b: u32| (33..=126).contains(&b) || (161..=172).contains(&b) || (174..=255).contains(&b);
+    for b in 0..256u32 {
+        if printable(b) {
+            table[b as usize] = char::from_u32(b).unwrap();
+        }
+    }
+    for b in 0..256u32 {
+        if !printable(b) {
+            table[b as usize] = char::from_u32(256 + n).unwrap();
+            n += 1;
+        }
+    }
+    table
+}
+
+fn decode_bytes_to_unicode(s: &[u8], table: &[char; 256]) -> String {
+    s.iter().map(|&b| table[b as usize]).collect()
+}
+
+/// GPT2-style pre-tokenization regex (simplified): contractions, letters,
+/// numbers, other-non-space, optional trailing space. Good enough for prompts.
+fn pretokenize(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    let mut cur = String::new();
+    let class = |c: char| -> u8 {
+        if c.is_alphabetic() {
+            1
+        } else if c.is_ascii_digit() {
+            2
+        } else if c == ' ' || c == '\n' || c == '\t' || c == '\r' {
+            3
+        } else {
+            4
+        }
+    };
+    while i < chars.len() {
+        let c = chars[i];
+        let k = class(c);
+        if k == 3 {
+            // space: attach to the NEXT non-space char if any
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
+            cur.push(' ');
+            i += 1;
+            while i < chars.len() && class(chars[i]) == 3 {
+                // collapse consecutive spaces: push standalone space chunks
+                if i + 1 < chars.len() && class(chars[i + 1]) == 3 {
+                    out.push(std::mem::take(&mut cur));
+                    cur.push(' ');
+                }
+                i += 1;
+            }
+        } else {
+            if class(c) != k && !cur.is_empty() && cur != " " {
+                out.push(std::mem::take(&mut cur));
+            } else if cur == " " && k != 3 {
+                // leading space joins this token
+            }
+            cur.push(c);
+            i += 1;
+            while i < chars.len() && class(chars[i]) == k {
+                cur.push(chars[i]);
+                i += 1;
+            }
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// One word (in byte-unicode space) -> token ids via BPE merges.
+fn bpe_word(word: &str, vocab: &Vocab, merges: &HashMap<(String, String), usize>) -> Vec<usize> {
+    // start from single chars
+    let mut parts: Vec<String> = word.chars().map(|c| c.to_string()).collect();
+    loop {
+        let mut best: Option<(usize, usize)> = None; // (rank, index)
+        for i in 0..parts.len().saturating_sub(1) {
+            if let Some(&rank) = merges.get(&(parts[i].clone(), parts[i + 1].clone()))
+                && best.is_none_or(|(br, _)| rank < br)
+            {
+                best = Some((rank, i));
+            }
+        }
+        match best {
+            Some((_, i)) => {
+                let merged = format!("{}{}", parts[i], parts[i + 1]);
+                parts.splice(i..i + 2, [merged]);
+            }
+            None => break,
+        }
+    }
+    parts
+        .iter()
+        .filter_map(|p| vocab.iter().find(|(t, _)| t == p).map(|(_, id)| *id))
+        .collect()
+}
+
+/// Full encode: pretokenize, byte-unicode map, BPE each word.
+fn encode(text: &str, vocab: &Vocab, merges: &HashMap<(String, String), usize>) -> Vec<usize> {
+    let table = byte_unicode();
+    let mut ids = Vec::new();
+    for word in pretokenize(text) {
+        let ub = decode_bytes_to_unicode(word.as_bytes(), &table);
+        ids.extend(bpe_word(&ub, vocab, merges));
+    }
+    ids
+}
+
+fn decode_ids(ids: &[usize], vocab: &Vocab, table: &[char; 256]) -> String {
+    let rev: HashMap<char, u8> = table
+        .iter()
+        .enumerate()
+        .map(|(b, c)| (*c, b as u8))
+        .collect();
+    let mut bytes: Vec<u8> = Vec::new();
+    for &id in ids {
+        if let Some((tok, _)) = vocab.iter().find(|&&(_, v)| v == id) {
+            // Each token is either byte-unicode encoded (all chars in rev) or
+            // a native Unicode string (contains chars NOT in rev, e.g. CJK).
+            // Map byte-encoded chars back; pass native Unicode through as UTF-8.
+            if tok.chars().all(|c| rev.contains_key(&c)) {
+                // Pure byte-encoded: reverse map to bytes
+                for c in tok.chars() {
+                    bytes.push(rev[&c]);
+                }
+            } else {
+                // Contains native Unicode: pass through as UTF-8
+                bytes.extend(tok.as_bytes());
+            }
+        }
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+/// SentencePiece (llama vocab) tokenizer.
+///
+/// Encoding: prepend the space marker '▁' (U+2581) if add_space_prefix,
+/// replace remaining ' ' with '▁', then greedy longest-match against the
+/// vocab; characters with no vocab hit fall back to <0xNN> byte tokens.
+pub mod spm {
+    use super::Vocab;
+    use std::collections::HashMap;
+
+    const SPACE: char = '\u{2581}';
+
+    pub fn encode(text: &str, vocab: &Vocab) -> Vec<usize> {
+        let mut s = String::from(SPACE);
+        s.push_str(&text.replace(' ', &SPACE.to_string()));
+        let vti: HashMap<&str, usize> = vocab.iter().map(|(t, id)| (t.as_str(), *id)).collect();
+        let chars: Vec<char> = s.chars().collect();
+        let mut ids = Vec::new();
+        let mut i = 0;
+        while i < chars.len() {
+            // greedy longest match
+            let mut matched = None;
+            let max_len = chars.len() - i;
+            'outer: for l in (1..=max_len.min(24)).rev() {
+                let cand: String = chars[i..i + l].iter().collect();
+                if vti.contains_key(cand.as_str()) {
+                    matched = Some(cand);
+                    break 'outer;
+                }
+            }
+            match matched {
+                Some(tok) => {
+                    ids.push(vti[&*tok]);
+                    i += tok.chars().count();
+                }
+                None => {
+                    // byte fallback: encode this char as <0xNN> per UTF-8 byte
+                    let mut buf = [0u8; 4];
+                    let b = chars[i].encode_utf8(&mut buf);
+                    for &byte in b.as_bytes() {
+                        let btok = format!("<0x{byte:02X}>");
+                        ids.push(vti.get(btok.as_str()).copied().unwrap_or(0));
+                    }
+                    i += 1;
+                }
+            }
+        }
+        ids
+    }
+
+    /// Decode ids to text: token strings with '▁' -> ' ', byte tokens <0xNN>
+    /// joined as raw bytes, control tokens dropped.
+    pub fn decode(ids: &[usize], vocab: &Vocab) -> String {
+        let mut bytes: Vec<u8> = Vec::new();
+        for &id in ids {
+            let Some(tok) = vocab
+                .iter()
+                .find(|&&(_, v)| v == id)
+                .map(|(t, _)| t.as_str())
+            else {
+                continue;
+            };
+            if tok.starts_with("<0x") && tok.ends_with('>') && tok.len() == 6 {
+                if let Ok(b) = u8::from_str_radix(&tok[3..5], 16) {
+                    bytes.push(b);
+                }
+            } else if tok.starts_with('<') && tok.ends_with('>') {
+                continue; // control/special token
+            } else {
+                bytes.extend(tok.replace(SPACE, " ").as_bytes());
+            }
+        }
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+}

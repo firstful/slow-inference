@@ -1,0 +1,35 @@
+{
+  "what": "Relative L2 error of logits against an independent float64 forward pass, per architecture. Establishes which side of a two-way engine-vs-llama.cpp diff is actually wrong.",
+  "generated": "2026-09-30 (tick 15)",
+  "method": "scripts/arbitrate_logits.py computes a third forward pass in float64 directly from the fixture weights, following llama.cpp's src/models/<arch>.cpp graph order. All three (engine, llama.cpp, float64) run the same token sequence 3,17,42,99,7,61,127,24 through the same synthetic F32 fixtures.",
+  "engine_error_vs_f64": {
+    "llama": 4.6e-7,
+    "qwen2": 4.3e-7,
+    "gpt2": 5.8e-7
+  },
+  "llama_cpp_error_vs_f64_default_flags": {
+    "llama": 4.24e-4,
+    "qwen2": 6.30e-4,
+    "gpt2": 9.60e-4
+  },
+  "llama_cpp_error_vs_f64_after_disabling_flash_attn": {
+    "llama": 1.97e-7,
+    "qwen2": 2.59e-7,
+    "gpt2": 3.11e-4
+  },
+  "llama_cpp_error_vs_f64_gpt2_modelling_f16_gelu_table": 3.7e-6,
+  "findings": [
+    "llama.cpp's own forward pass is the LESS accurate of the two by ~1000x. A two-way engine-vs-llama.cpp diff cannot reveal this; it looks like a parity gap when it is the oracle that is drifting.",
+    "Cause 1: build_attn_mha casts K and V to GGML_TYPE_F16 before ggml_flash_attn_ext (llama-graph.cpp:2530). Disabling flash attention drops llama/qwen2 from ~5e-4 to ~2e-7.",
+    "Cause 2: the KV cache defaults to F16 (llama-context.cpp:3508). Measured to be a no-op on these fixtures once flash attention is off, so it is not a factor here - but it is still a 5e-4-class source on longer contexts where flash attention is not in play.",
+    "Cause 3: GGML_GELU_FP16 is #defined unconditionally (ggml-cpu/vec.h:46), so GELU is evaluated by looking up a 64K-entry float16 table keyed on the float16 bits of the input. Modelling that table in the float64 reference reproduces llama.cpp's gpt2 to 1.5e-7, confirming it is the entire residual. It cannot be disabled from outside ggml, which is why gpt2 needs a looser gate against the llama.cpp reference."
+  ],
+  "consequences": [
+    "engine/tests/ref_parity.rs now gates on TWO references per arch: <arch>.ref (llama.cpp, proves we compute its function) and <arch>.f64.ref (exact math, the tight gate).",
+    "gpt2 has a 2e-3 floor against llama.cpp by necessity, not by slack; its real constraint is the 1e-5 float64 gate.",
+    "The F32 parity claim is now ~5e-7, not the ~2e-4 previously reported against llama.cpp."
+  ],
+  "not_explained": [
+    "The real Qwen2.5-3B Q4_K_M gap (cos 0.996-0.9993) is NOT explained by any of the three causes above: for a 3B model at 36 layers the float16 shortcuts accumulate far less than the observed disagreement, and quantization error dominates. Still open."
+  ]
+}

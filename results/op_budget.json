@@ -1,0 +1,68 @@
+{
+ "question": "A per-OP error budget. The engine(F32) vs llama.cpp(F32) residual on qwen2.5-3b is 4.07e-6 after every REDUCTION was matched exactly (the 18-site sweep). Nothing said whether that 4.07e-6 is the composed consequence of ops already measured, or an op nobody has looked at. A per-model number cannot tell those apart: a fully-explained floor and a missing op both print one number.",
+ "method": [
+  "engine/src/opdump.rs captures the vectors the engine's OWN forward pass produced (silu gate pre-activations, attention scores, rope inputs/outputs) -- not synthesised. 21168 vectors, 26.5 MB, 36 layers x 12 positions.",
+  "engine/tools/probe_op_budget.c measures each op's relative L2 AND bit agreement between the reference kernel and the engine's formulation, on those vectors.",
+  "the tool's transcriptions of ggml_v_expf / ggml_v_silu / ggml_vec_soft_max_f32 are verified BIT-IDENTICAL against the real exported ggml_vec_silu_f32 and ggml_vec_soft_max_f32 in libggml-cpu.so (--verify), with a control proving the check discriminates.",
+  "composition: random walk over independent roundings. An ASSUMPTION, and it is tested below by porting the largest per-op error and re-measuring end to end."
+ ],
+ "llama_cpp": "/home/reeds/llama.cpp",
+ "llama_cpp_commit": "3653e6d",
+ "model": "/home/reeds/wide/qwen2.5-3b-f32.gguf (F32 widening of models/qwen2.5-3b-instruct-q4_k_m.gguf)",
+ "reference": "cached at /tmp/opencode/t31/work/llama-{capital,moon}.ref -- NOT re-run, so every column shares one oracle",
+ "per_op": {
+  "note": "relative L2 of the engine's formulation vs the reference kernel, on 21168 real activation vectors",
+  "silu": {
+   "rel_l2": 3.7774e-08,
+   "bits_differing": "1776330/4755456 (37.35%)",
+   "reference": "ggml_vec_silu_f32 -> ggml_v_silu -> ggml_v_expf (the ARM polynomial, ~1.95 ulp)",
+   "engine": "x / (1 + expf(-x)) with libm expf",
+   "why_small": "the polynomial is within ~2 ulp of libm, so a 37% bit disagreement is a ~4e-8 effect"
+  },
+  "softmax": {
+   "rel_l2": 7.0104e-08,
+   "bits_differing": "27020/44928 (60.14%)",
+   "reference": "ggml_vec_soft_max_f32: expf is the POLYNOMIAL, the sum is 8 f32 lanes reduced as a tree into a DOUBLE, and ops.cpp:5549 does 1.0/sum in double then scales",
+   "engine": "libm expf, sum in SEQUENTIAL f32, then each element divided by the f32 sum",
+   "why_small": "three wrong things that all cancel to ~1e-7 at these sequence lengths (max 12)"
+  },
+  "rope": {
+   "rel_l2": 0.00021099,
+   "bits_differing": "793012/884736 (89.63%)",
+   "reference": "ggml_compute_forward_rope_flt (ops.cpp:5953) + ggml_rope_cache_init (ops.cpp:5846): f32 powf, f32 ladder, sinf/cosf of an f32",
+   "engine": "f64 pow, f64 ladder, f64 sin/cos narrowed at the end",
+   "verdict": "THE ONE REAL FINDING -- 5600x the size of the other two, and the only op here that is wrong by more than round-off"
+  }
+ },
+ "composition_and_why_it_is_wrong": {
+  "predicted_if_random_walk": 0.0025318,
+  "measured_end_to_end": 4.0668e-06,
+  "ratio": 0.0016,
+  "verdict": "OVERSHOOTS by 3 orders of magnitude, so the random-walk composition is WRONG, not the ops. An op whose error is a coherent ROTATION (rope) does not accumulate like independent roundings: every head and every layer gets the SAME angle error, so it cancels instead of adding.",
+  "this_was_not_left_as_an_assumption": "it was tested by porting rope and re-measuring end to end"
+ },
+ "rope_port": {
+  "what_changed": "theta_scale and the frequency ladder in f32, carrying theta as the reference does rather than recomputing pos*cur, and BOTH products contracted into an fma (rotate_pairs is compiled into an -O3 libggml-cpu.so, which contracts; nothing in the source says so)",
+  "bit_identical_to": "ggml on 15936/15936 golden values across n_dims {8,32,64,80,96,128,256}, pos {0,1,7,137}, 3 freq_bases, both NORMAL and NEOX",
+  "before": "f64 ladder, no fma: 5267/15936 bits differ",
+  "after_f32_but_no_fma": "1822/15936 bits differ -- i.e. 93.75% bit-identical passes a 1e-6 tolerance test, which is why the original test was a tolerance and looked justified",
+  "END_TO_END_EFFECT": "NONE. 4.0668e-06 -> 4.5492e-06 -> 4.0668e-06 on the worst position: the f32 port is strictly more correct and moved the logits by nothing. argmax 17/17 throughout."
+ },
+ "the_finding": "A 2.1e-4 per-op error that is bit-exactly fixed does not move the end-to-end residual. That is the answer to the question the budget was built to answer, and it is the opposite of what the budget predicted: the 4.07e-6 is NOT the sum of the per-op errors, because the dominant per-op error is a coherent rotation that cancels. So the per-op budget, as a composition device, does not work -- and the next question is not 'which op is left' but 'what is the 4.07e-6 made of, given that the ops are now all at round-off'.",
+ "rope_golden_toy_width": "engine/tests/data/rope_golden.bin was entirely n_dims=8 -- FOUR ladder rungs. The f64/f32 question was worth 1 bit in 144 there, so a 2.1e-4 per-op error sat behind a golden that printed OK. tools/dump_rope.c now sweeps 7 widths including real head dims; the revert is caught 5267/15936 instead of 1/144. Same failure shape as the ggml_vec_dot_f32 tail (tick 32): a toy width is the only thing that cannot see the bug.",
+ "artifacts": {
+  "tool": "engine/tools/probe_op_budget.c (--verify links libggml-cpu.so; --control runs with no model)",
+  "capture": "engine/src/opdump.rs, inert unless SLOW_OP_DUMP names a file",
+  "regen": "gcc -O2 -std=c11 -o /tmp/dump_rope engine/tools/dump_rope.c -I$HOME/llama.cpp/ggml/include -L$HOME/llama.cpp/build/bin -lggml -lggml-base -lggml-cpu -lm && /tmp/dump_rope engine/tests/data/rope_golden.bin",
+  "port": "rope_apply in engine/src/model.rs",
+  "test": "engine/tests/rope_parity.rs, now 2 tests: the original 1e-6 gate kept, plus bit equality"
+ },
+ "bugs_of_my_own": [
+  "the activation writer wrote `n.to_le_bytes()` on a u64 -- EIGHT bytes where the reader expected four, so every record after the first was skewed and the reader reported 'slot 1052389815 >= 4'. Silent and total.",
+  "the slot-3 branch passed the same buffer as src and dst to eng_rope, which writes dst[i] before reading src[i+half]; it reported rel L2 9.46e-01 that meant nothing.",
+  "the verdict thresholds were INVERTED: measured/predicted = 0.0016 was being printed as 'consistent: budget explains it', when a ratio that far below 1 means the budget OVERSHOOTS. The tool agreed with whatever it was told.",
+  "my first silu transcription used the vector polynomial in the scalar tail; upstream's tail is ggml_silu_f32, which is libm expf. Caught by --verify against the real exported kernel, which is the only reason that check was worth writing.",
+  "NaN payloads counted as bit differences, which is not a kernel difference."
+ ],
+ "state": "173 tests pass in the live tree, cargo fmt --check clean, clippy 0 warnings"
+}

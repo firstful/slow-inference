@@ -1,0 +1,24 @@
+{
+  "prompt": [
+    3,
+    17,
+    42,
+    99,
+    7,
+    61,
+    127,
+    24
+  ],
+  "seed": "0x5eed",
+  "llama_cpp_loads": {
+    "llama_split": true,
+    "llama_fused": false,
+    "deepseek2_fused": true
+  },
+  "llama_arch_fused_rejected_with": "llama_model_load: error loading model: check_tensor_dims: tensor 'blk.0.ffn_up_exps.weight' not found",
+  "why": "the llama arch does not call create_tensor_gate_up_exps (src/models/llama.cpp:78-80): it creates ffn_gate_exps / ffn_up_exps directly and passes flags=0 for ffn_up_exps, i.e. required. So a llama-arch file carrying only ffn_gate_up_exps cannot load at all, and the fused form is testable only on an arch that calls the helper.",
+  "fused_row_order_is_observable": true,
+  "rel_l2_reversed_vs_gate_up": 0.559484652771401,
+  "engine_split_vs_fused_bit_identical": true,
+  "llama_cpp_split_vs_fused_bit_identical": true
+}

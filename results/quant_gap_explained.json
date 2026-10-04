@@ -1,0 +1,248 @@
+{
+  "model": "/home/reeds/slow-inference/models/Tiny-Moe.Q4_K_M.gguf",
+  "prompt": "The capital of France is",
+  "llama_cpp_commit": "3653e6d",
+  "question": "engine vs llama.cpp disagree by 2-6e-2 relative L2 on Tiny-MoE Q4_K_M with argmax agreeing everywhere. Which side drifts, and why?",
+  "method": [
+    "1. independent float64 forward pass over the dequantized weights",
+    "2. the same model rewritten to F32 with identical weight values",
+    "3. one matvec, ggml kernel path vs float64, with and without activation quantization"
+  ],
+  "per_matvec": {
+    "n_rows_probed": 258,
+    "median_rel_l2": 0.005419,
+    "min_rel_l2": 0.0002549,
+    "max_rel_l2": 0.05281,
+    "control_no_activation_quant": [
+      1.355e-07,
+      1.12e-07,
+      1.504e-07
+    ],
+    "control_worst_rel_l2": 1.504e-07,
+    "summary": {
+      "q6_K/ne0=768/gaussian": {
+        "mean_rms": 0.007255,
+        "worst": 0.01228
+      },
+      "q6_K/ne0=768/uniform": {
+        "mean_rms": 0.003839,
+        "worst": 0.006499
+      },
+      "q6_K/ne0=768/heavy_tail": {
+        "mean_rms": 0.01376,
+        "worst": 0.03688
+      },
+      "q4_K/ne0=768/gaussian": {
+        "mean_rms": 0.007373,
+        "worst": 0.01649
+      },
+      "q4_K/ne0=768/uniform": {
+        "mean_rms": 0.004448,
+        "worst": 0.01208
+      },
+      "q4_K/ne0=768/heavy_tail": {
+        "mean_rms": 0.0114,
+        "worst": 0.05281
+      },
+      "q6_K/ne0=2048/gaussian": {
+        "mean_rms": 0.007552,
+        "worst": 0.01693
+      },
+      "q6_K/ne0=2048/uniform": {
+        "mean_rms": 0.003298,
+        "worst": 0.004891
+      },
+      "q6_K/ne0=2048/heavy_tail": {
+        "mean_rms": 0.02139,
+        "worst": 0.03722
+      },
+      "q4_K/ne0=2048/gaussian": {
+        "mean_rms": 0.005414,
+        "worst": 0.007669
+      },
+      "q4_K/ne0=2048/uniform": {
+        "mean_rms": 0.003751,
+        "worst": 0.005172
+      },
+      "q4_K/ne0=2048/heavy_tail": {
+        "mean_rms": 0.01593,
+        "worst": 0.03489
+      }
+    }
+  },
+  "tokens": [
+    1,
+    4014,
+    87,
+    259,
+    1558,
+    1737,
+    294,
+    4014,
+    73,
+    3587,
+    599
+  ],
+  "n_tokens": 11,
+  "engine_q4_vs_f64": {
+    "worst_rel_l2": 4.915176032565586e-06,
+    "best_rel_l2": 1.0266579390789323e-06,
+    "argmax_matches": 11,
+    "n_positions": 11,
+    "per_position": [
+      1.0266579390789323e-06,
+      4.915176032565586e-06,
+      3.2294571533710212e-06,
+      1.6032536664328036e-06,
+      2.1919055345508036e-06,
+      1.4061827432028735e-06,
+      1.7132801249614202e-06,
+      3.5390876817656447e-06,
+      2.5930735675371266e-06,
+      1.3584258367751443e-06,
+      1.2582410284327873e-06
+    ]
+  },
+  "engine_f32_vs_f64": {
+    "worst_rel_l2": 4.915176032565586e-06,
+    "best_rel_l2": 1.0266579390789323e-06,
+    "argmax_matches": 11,
+    "n_positions": 11,
+    "per_position": [
+      1.0266579390789323e-06,
+      4.915176032565586e-06,
+      3.2294571533710212e-06,
+      1.6032536664328036e-06,
+      2.1919055345508036e-06,
+      1.4061827432028735e-06,
+      1.7132801249614202e-06,
+      3.5390876817656447e-06,
+      2.5930735675371266e-06,
+      1.3584258367751443e-06,
+      1.2582410284327873e-06
+    ]
+  },
+  "engine_q4_dump_identical_to_f32": true,
+  "llama_q4_vs_f64_by_config": {
+    "precise": {
+      "worst_rel_l2": 0.06083221054847946,
+      "best_rel_l2": 0.0199551865365189,
+      "argmax_matches": 11,
+      "n_positions": 11,
+      "per_position": [
+        0.023413161940603656,
+        0.05081131408437286,
+        0.06083221054847946,
+        0.04509876782367528,
+        0.054354836028915936,
+        0.03415528659551101,
+        0.028223475177792716,
+        0.0530022303736754,
+        0.04411553038988108,
+        0.02241651929984449,
+        0.0199551865365189
+      ]
+    },
+    "flash_attn_on": {
+      "worst_rel_l2": 0.06335987640713679,
+      "best_rel_l2": 0.018656017370287437,
+      "argmax_matches": 11,
+      "n_positions": 11,
+      "per_position": [
+        0.018656017370287437,
+        0.06278051474226654,
+        0.06335987640713679,
+        0.04375476769222636,
+        0.05431549036291858,
+        0.032917882110145756,
+        0.02853985521505344,
+        0.05459303796428538,
+        0.06072686971145686,
+        0.02165266367898246,
+        0.024925516611391127
+      ]
+    },
+    "f16_kv_cache": {
+      "worst_rel_l2": 0.09260230931638133,
+      "best_rel_l2": 0.018656017370287437,
+      "argmax_matches": 11,
+      "n_positions": 11,
+      "per_position": [
+        0.018656017370287437,
+        0.04072791224917079,
+        0.09260230931638133,
+        0.04927357327857886,
+        0.061316951022346494,
+        0.033001086025805274,
+        0.03127190002123848,
+        0.05453072162994538,
+        0.06779431276052438,
+        0.02437744895103984,
+        0.022870853393896252
+      ]
+    },
+    "llama_cpp_defaults": {
+      "worst_rel_l2": 0.06335987640713679,
+      "best_rel_l2": 0.018656017370287437,
+      "argmax_matches": 11,
+      "n_positions": 11,
+      "per_position": [
+        0.018656017370287437,
+        0.06278051474226654,
+        0.06335987640713679,
+        0.04375476769222636,
+        0.05431549036291858,
+        0.032917882110145756,
+        0.02853985521505344,
+        0.05459303796428538,
+        0.06072686971145686,
+        0.02165266367898246,
+        0.024925516611391127
+      ]
+    },
+    "precise_8_threads": {
+      "worst_rel_l2": 0.06083221054847946,
+      "best_rel_l2": 0.0199551865365189,
+      "argmax_matches": 11,
+      "n_positions": 11,
+      "per_position": [
+        0.023413161940603656,
+        0.05081131408437286,
+        0.06083221054847946,
+        0.04509876782367528,
+        0.054354836028915936,
+        0.03415528659551101,
+        0.028223475177792716,
+        0.0530022303736754,
+        0.04411553038988108,
+        0.02241651929984449,
+        0.0199551865365189
+      ]
+    }
+  },
+  "llama_f32_vs_f64": {
+    "worst_rel_l2": 6.83240747029367e-07,
+    "best_rel_l2": 1.8639334176024324e-07,
+    "argmax_matches": 11,
+    "n_positions": 11,
+    "per_position": [
+      1.8639334176024324e-07,
+      6.170083132744819e-07,
+      6.83240747029367e-07,
+      3.887518726697071e-07,
+      4.81719279831621e-07,
+      3.066429625525391e-07,
+      2.8159336405049703e-07,
+      5.087797936162943e-07,
+      6.420522202502778e-07,
+      2.3837940087860932e-07,
+      2.547326653580253e-07
+    ]
+  },
+  "verdict": {
+    "engine": "1e-6 from exact float64 on both weight containers; its Q4_K_M logits are byte-identical to its F32 logits",
+    "llama_cpp": "6.1e-02 from exact on Q4_K_M weights, 6.8e-07 on the same weight values in an F32 container",
+    "cause": "ggml rounds the activation to Q8_K before every quantized dot product; the --control row isolates it to that and nothing else",
+    "consequence": "any engine-vs-llama.cpp diff on 4-bit weights carries a ~2e-2 relative floor that is llama.cpp's, not a semantic disagreement. Gate quantized comparisons on argmax/top-k, and gate architecture semantics on the F32 rewrite."
+  }
+}

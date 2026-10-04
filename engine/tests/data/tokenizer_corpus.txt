@@ -1,0 +1,152 @@
+# Tokenizer parity corpus.
+#
+# One case per line: NAME<TAB>escaped-text. Both `tools/gen_ref_tokens.c`
+# (llama.cpp side) and `tests/tokenizer_parity.rs` (engine side) read this
+# file; the token ids each produces are compared against each other. Escapes:
+# `\\`, `\t`, `\n`, `\r`, `\xNN`; everything else is literal UTF-8.
+#
+# Each case is replayed four ways, over both axes of
+# `llama_tokenize(vocab, text, add_special, parse_special)`.
+#
+# These are chosen to hit the places the pre-tokenizers disagree, not to be
+# representative prose. The last block is specific to the SPM vocabulary
+# (`tokenizer.ggml.model = "llama"`), which has no pre-tokenizer at all: its unit
+# of segmentation is llama.cpp's score-ordered pairwise merge over the whole
+# string, and these are the shapes where that order is observable.
+
+# --- plain ASCII and word boundaries ---------------------------------------
+word_single	the
+word_space_prefix	 the
+word_trailing_space	the
+two_words	the quick brown fox
+punct_word	hello, world!
+dash	well-known state-of-the-art
+apostrophe	it's don't we're they've I'm he'd she's
+apostrophe_upper	IT'S DON'T WE'RE
+apostrophe_not_contract	x'y z'q
+# 'x'y: the contraction alternative only fires for s/t/m/d/re/ve/ll, so the
+# apostrophe falls into the punctuation class here. A hand-rolled splitter
+# that grabs "apostrophe + next letter" diverges on exactly this line.
+
+# --- digits: `\p{N}` vs `\p{N}+` vs `\p{N}{1,3}` ---------------------------
+digits	12345
+digits_with_commas	1,234,567
+mixed_alnum	abc123def456
+version	v1.2.3
+float	3.14159
+
+# --- whitespace -------------------------------------------------------------
+tabs	a\tb
+newlines	line one\nline two
+crlf	one\r\ntwo
+trailing_space	word 
+multiple_trailing_spaces	word  
+leading_spaces	  indented
+double_space	two  spaces
+newline_only_end	text\n\n\n
+tabs_and_spaces	a \t b \t\t c
+
+# --- unicode ---------------------------------------------------------------
+cjk	你好世界
+japanese	こんにちは
+hangul	안녕하세요
+cyrillic	Привет мир
+accented	café naïve résumé
+emoji	family 👨‍👩‍👧‍👦 emoji 🎉
+combining	é vs é
+# The last two differ only in NFD vs NFC composition; \p{M} handling is the
+# difference between the qwen2 and qwen35 regexes.
+
+# --- mixed / edge cases -----------------------------------------------------
+code	def f(x):\n    return x ** 2
+url	https://example.com/path?q=1&r=2
+json	{"key": "value", "n": [1, 2, 3]}
+newline_between	para one\n\npara two\n
+quote_only	"
+single_quote	'
+lone_apostrophe_s	's
+empty_adjacent	...
+math	a+b-c*d/e
+symbols	<|im_start|>user\nhi<|im_end|>
+
+# --- SPM: the whole string is one Viterbi, so only the scores order it ------
+# In "yesterday" the pair (s,t)->"st" outscores (y,e)->"ye", so "yes" forms and
+# the leading "▁" is left stranded; greedy longest-match takes "▁ye"+"ster"
+# instead. Every case below was picked because the engine's previous greedy
+# longest-match disagrees with llama.cpp on it, so a green test here is not
+# green for free.
+spm_merge_order_yesterday	yesterday
+spm_merge_order_development	development
+spm_merge_order_especially	especially
+spm_merge_order_sentence	The quick brown fox jumps over the lazy dog.
+
+# --- SPM: the space marker is just a letter in the alphabet -----------------
+# U+2581 is a *normal* token, so a literal one in the input is indistinguishable
+# from an escaped space: "a▁b" reads as "a b". Nothing normalizes it away.
+spm_literal_marker	a▁b
+spm_marker_edges	▁hello▁
+spm_marker_only	▁
+
+# --- SPM: byte fallback and whitespace runs --------------------------------
+spm_spaces_only	   
+spm_lead_spaces	   hello
+spm_control_bytes	a\x01b\x02
+spm_repeat_char	aaaaaaaaaaaaaaaa
+spm_long_word	extraordinarily
+
+# --- SPM: control tokens are text when parse_special is false --------------
+# "<s>" and "</s>" are CONTROL in this vocabulary, and llama.cpp skips
+# CONTROL/UNKNOWN tokens in tokenizer_st_partition unless parse_special, so
+# they are spelled out as ordinary characters rather than emitted as ids 1/2.
+# Every case in the corpus is replayed with parse_special off *and* on; for this
+# one that means the same text is both the literal characters and the ids.
+spm_control_as_text	<s>hello</s>
+
+# --- the parse_special axis -------------------------------------------------
+# `llama_tokenize(vocab, text, add_special, parse_special)`: with parse_special
+# false, tokenizer_st_partition cuts the raw text only on USER_DEFINED tokens.
+# With it true it also cuts on CONTROL and UNKNOWN, emitting them as their own
+# ids. llama-server tokenizes with parse_special = true; a raw prompt tokenizer
+# has no reason to, which is why the engine used to hard-code it off.
+#
+# These use Qwen2's CONTROL family. `<|im_start|>` is id 151644 and `<|im_end|>`
+# is 151645 there, CONTROL with no lstrip/rstrip; OLMoE has `<|endoftext|>` as
+# CONTROL, and Tiny-MoE has only `<unk>`, `<s>`, `</s>` — so a case that is a
+# special token on one model is ordinary text on another. That is deliberate:
+# the test asserts each model separately, and the corpus is not allowed to be
+# degenerate for any of them.
+
+# The entire prompt is one special token. Under parse_special the original raw
+# fragment is *replaced* rather than split (llama-vocab.cpp's `source == 0` ->
+# `erase_after(before_begin())`), which is the one branch no split case reaches.
+special_alone	<|im_start|>
+
+# Two of the same special back to back: the second match sits exactly at the
+# base offset, so there is no left reminder to emit.
+special_twice	<|im_end|><|im_end|>
+
+# No whitespace on either side, so the text either side of the special becomes
+# two pre-token words instead of one word with the marker in the middle.
+special_tight	a<|im_end|>b
+
+# A special at each end, with plain text between.
+special_edges	<|im_start|>mid<|im_end|>
+
+# A truncated special. The partition matches whole token texts, longest first,
+# so this must come out spelled out under *both* settings — the negative control
+# that separates "cuts on a special token" from "cuts on a special prefix".
+special_partial	<|im_sta
+
+# A special glued into the middle of a word, with no whitespace anywhere.
+special_in_word	mail<|endoftext|>box
+
+# SPM only. `is_prev_special` starts true, so under parse_special the fragment
+# after a Token fragment is prefixed with the space marker even though the input
+# already has a leading space — llama.cpp's `add_space_prefix` has no opinion
+# about what the text starts with, only about what preceded it.
+spm_special_space_prefix	<s> hello
+
+# The degenerate prompt. llama.cpp: encode("", add_special=True) == [BOS],
+# encode("", add_special=False) == []. The read_ref parser needs an explicit
+# "which IDS line is this" counter because the first one is empty here.
+empty_text	

@@ -1,0 +1,41 @@
+{
+  "model": "models/Tiny-Moe.Q4_K_M.gguf",
+  "prompt": [
+    13,
+    120,
+    391,
+    42,
+    7,
+    260,
+    511,
+    88
+  ],
+  "vocab": 4096,
+  "llama_cpp": "/home/reeds/llama.cpp",
+  "pairs": {
+    "engine_f32_vs_llama_f32 (semantics, quantization removed)": {
+      "worst_rel_l2": 3.3736851297719745e-06,
+      "worst_cosine": 0.9999999999956964,
+      "argmax_agreement": 8,
+      "n_positions": 8
+    },
+    "engine_q_vs_engine_f32 (our sensitivity to 4-bit weights)": {
+      "worst_rel_l2": 0.0,
+      "worst_cosine": 1.0,
+      "argmax_agreement": 8,
+      "n_positions": 8
+    },
+    "llama_q_vs_llama_f32 (llama.cpp's own sensitivity)": {
+      "worst_rel_l2": 0.07530174716434687,
+      "worst_cosine": 0.9972171569602223,
+      "argmax_agreement": 6,
+      "n_positions": 8
+    },
+    "engine_q_vs_llama_q (the gap as originally observed)": {
+      "worst_rel_l2": 0.07471745476370997,
+      "worst_cosine": 0.9972171553316667,
+      "argmax_agreement": 6,
+      "n_positions": 8
+    }
+  }
+}

@@ -1,0 +1,360 @@
+{
+ "question": "engine(F32) vs llama.cpp(F32) on qwen2.5-3b was 2.1e-5..2.5e-4 and tick 31 attributed it to 'f32 summation order in matvec', proposing a switch to f64 accumulation. Is that the whole story, and is f64 the right fix?",
+ "method": [
+  "engine/tools/probe_f32_dot.c: run the real ggml_mul_mat kernel and compare it bit for bit against four accumulation schemes on real weight rows read out of a real GGUF",
+  "identify the compiled branch of ggml_vec_dot_f32 from the bit patterns and confirm it against the disassembly of libggml-cpu.so",
+  "engine/tests/data/dot_golden.bin: 243 kernel dot products across 35 lengths, replayed against the engine's ggml_dot_f32",
+  "end-to-end: one engine build per change, same binary, same F32 weight file, diffed against the cached llama.cpp F32 reference (the oracle was not re-run, so all three columns share it)"
+ ],
+ "llama_cpp": "/home/reeds/llama.cpp",
+ "llama_cpp_commit": "3653e6d",
+ "model": "/home/reeds/wide/qwen2.5-3b-f32.gguf (F32 widening of models/qwen2.5-3b-instruct-q4_k_m.gguf)",
+ "reference": "cached at /tmp/opencode/t31/work/llama-{capital,moon}.ref (gen_ref_logits, flash off, f32 KV)",
+ "kernel_identified": {
+  "function": "ggml_vec_dot_f32 (ggml/src/ggml-cpu/vec.cpp:11)",
+  "branch": "AVX/AVX2 -- 4 __m256 accumulators of 8 lanes, vfmadd231ps, 3-level pairwise f32 tree, vextractf128 + vaddps, vhaddps x2",
+  "leftover_loop": "the compiler gave it two shapes: tail<=3 straight-line vfmadd231ss; tail>=4 a 4-wide vmulps + four vaddss block, then the tail%4 remainder fused again",
+  "bit_identical_to_a_scalar_emulation_at_ne0": "every length 1..200 (40 rows each, 8000 dot products)",
+  "cmake_cache_says": "GGML_AVX=OFF, GGML_AVX2=OFF, GGML_FMA=OFF -- and the .so it produced is an AVX2 build. The cache is stale; reasoning from it inverts the answer.",
+  "rms_norm_is_a_different_rule": "ggml_compute_forward_rms_norm_f32 (ops.cpp:3828) is a hand-written loop: f32 products accumulated in a ggml_float (double), mean = sum/ne00 narrowed to f32, scale = 1.0f/sqrtf(mean+eps). Not vec_dot at all."
+ },
+ "schemes_vs_kernel": {
+  "note": "dis = ||scheme - ggml|| / ||ggml - exact||; identical functions score 0 here and `exact` scores 1 by construction",
+  "qwen2.5-3b-f32, 8 tensors x 48 rows": {
+   "seq_f32 (what the engine did)": {
+    "err_vs_exact": 9.409e-07,
+    "dis_vs_ggml": 7.657,
+    "bitdiff": "370/384"
+   },
+   "scal_f64 (what tick 31 proposed)": {
+    "err_vs_exact": 3.018e-08,
+    "dis_vs_ggml": 0.994,
+    "bitdiff": "262/384"
+   },
+   "simd_tree (this tick's port)": {
+    "err_vs_exact": 1.698e-07,
+    "dis_vs_ggml": 0.0,
+    "bitdiff": "0/384"
+   }
+  },
+  "tiny-moe, 6 tensors x 64 rows": {
+   "seq_f32": {
+    "err_vs_exact": 5.71e-07,
+    "dis_vs_ggml": 8.69,
+    "bitdiff": "364/384"
+   },
+   "scal_f64": {
+    "err_vs_exact": 2.599e-08,
+    "dis_vs_ggml": 0.985,
+    "bitdiff": "190/384"
+   },
+   "simd_tree": {
+    "err_vs_exact": 7.845e-08,
+    "dis_vs_ggml": 0.0,
+    "bitdiff": "0/384"
+   }
+  },
+  "finding": "f64 accumulation is 31x more accurate than the engine's sequential f32 and still disagrees with the kernel in 68% of rows, because the kernel does not accumulate in f64. It is a better engine, not a parity one. Only the tree is bit-identical."
+ },
+ "end_to_end_engine_f32_vs_llama_cpp_f32": {
+  "capital": {
+   "tokens": [
+    785,
+    6722,
+    315,
+    9625,
+    374
+   ],
+   "per_position": [
+    {
+     "pos": 0,
+     "argmax_llama": 2701,
+     "was_seq_f32": {
+      "rel_l2": 2.129423386089447e-05,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 2.1570116680019384e-05,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 1,
+     "argmax_llama": 315,
+     "was_seq_f32": {
+      "rel_l2": 7.209577103867805e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 7.254924837059217e-06,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 2,
+     "argmax_llama": 279,
+     "was_seq_f32": {
+      "rel_l2": 4.808434046035118e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 4.229482728959348e-06,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 3,
+     "argmax_llama": 11,
+     "was_seq_f32": {
+      "rel_l2": 3.4464552439167932e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 3.448947323808494e-06,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 4,
+     "argmax_llama": 12095,
+     "was_seq_f32": {
+      "rel_l2": 3.6401338059689708e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 3.896809907475414e-06,
+      "argmax_match": true
+     }
+    }
+   ]
+  },
+  "moon": {
+   "tokens": [
+    641,
+    220,
+    16,
+    24,
+    21,
+    24,
+    11,
+    12677,
+    1156,
+    26120,
+    389,
+    279
+   ],
+   "per_position": [
+    {
+     "pos": 0,
+     "argmax_llama": 264,
+     "was_seq_f32": {
+      "rel_l2": 4.4496207005245345e-05,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 4.437482952960483e-05,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 4.527750493589238e-05,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 1,
+     "argmax_llama": 16,
+     "was_seq_f32": {
+      "rel_l2": 6.158348162395601e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 5.765520767449092e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 5.847362800226602e-06,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 2,
+     "argmax_llama": 24,
+     "was_seq_f32": {
+      "rel_l2": 0.00024534920927748386,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 0.00021734352566366475,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 0.00018983750009862394,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 3,
+     "argmax_llama": 24,
+     "was_seq_f32": {
+      "rel_l2": 1.248556358712723e-05,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 1.155346696617239e-05,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 1.0229212897054108e-05,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 4,
+     "argmax_llama": 15,
+     "was_seq_f32": {
+      "rel_l2": 1.4122352480158515e-05,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 1.3148250377801705e-05,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 1.1682049275141816e-05,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 5,
+     "argmax_llama": 11,
+     "was_seq_f32": {
+      "rel_l2": 1.1581340758925781e-05,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 1.0716526009942767e-05,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 9.812799536344777e-06,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 6,
+     "argmax_llama": 279,
+     "was_seq_f32": {
+      "rel_l2": 6.422335219801623e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 6.11993932843214e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 5.261200806419557e-06,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 7,
+     "argmax_llama": 1156,
+     "was_seq_f32": {
+      "rel_l2": 1.1277716313182115e-05,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 9.719482966779553e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 8.857659840104353e-06,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 8,
+     "argmax_llama": 738,
+     "was_seq_f32": {
+      "rel_l2": 8.765799672507879e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 8.085736647954427e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 7.401066354733544e-06,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 9,
+     "argmax_llama": 389,
+     "was_seq_f32": {
+      "rel_l2": 8.161888737800479e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 7.902134192307897e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 6.551755658802131e-06,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 10,
+     "argmax_llama": 279,
+     "was_seq_f32": {
+      "rel_l2": 6.284287079568184e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 6.192916000701264e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 5.058319152290191e-06,
+      "argmax_match": true
+     }
+    },
+    {
+     "pos": 11,
+     "argmax_llama": 17788,
+     "was_seq_f32": {
+      "rel_l2": 6.081915601211134e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order": {
+      "rel_l2": 5.897082389311123e-06,
+      "argmax_match": true
+     },
+     "ggml_dot_order_plus_rms_norm": {
+      "rel_l2": 4.848186283746936e-06,
+      "argmax_match": true
+     }
+    }
+   ]
+  }
+ },
+ "answer": {
+  "the_matvec_was_not_the_residuals_home": true,
+  "worst_rel_l2": {
+   "was": 0.00024535,
+   "after_ggml_dot_order": 0.00021734,
+   "after_also_rms_norm": 0.00018984
+  },
+  "what_tick_31_got_wrong": "the attribution ('f32 summation order in matvec') and the fix ('sum in f64 and round once'). The mat-mul and the RMSNorm use different reduction rules, and neither is f64-everywhere. Porting the matvec exactly moved the worst position 2.45e-4 -> 2.17e-4 and porting the norm as well -> 1.90e-4, monotonically and on every position, so each is a real source -- but the residual is spread over many small ones, not concentrated in one.",
+  "argmax_agreement_with_llama_cpp": "12/12 on moon after both changes (was 12/12), 5/5 on capital",
+  "still_open": "engine/src/model.rs has 18 remaining `map(|(a,b)| a*b).sum::<f32>()` sites: 3 attention-score lines (1887, 2051, 2433) and 15 in the MoE / fused-gate-up expert paths. Every one of them is ggml_vec_dot_f32 on the reference side. Those are the enumerated next step, not another hypothesis."
+ },
+ "artifacts": {
+  "tool": "engine/tools/probe_f32_dot.c (also --shape-scan N, --emit-golden, --control)",
+  "port": "engine/src/ggml_dot.rs (ggml_dot_f32, ggml_rms_norm_scale)",
+  "golden": "engine/tests/data/dot_golden.bin (243 kernel dot products, 35 lengths)",
+  "test": "engine/tests/dot_golden.rs",
+  "regen": "engine/scripts/gen_dot_golden.sh"
+ }
+}

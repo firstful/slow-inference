@@ -1,0 +1,693 @@
+{
+  "model": "models/qwen2.5-3b-instruct-q4_k_m.gguf",
+  "geometry": {
+    "arch": "qwen2",
+    "n_layer": 36,
+    "n_head": 16,
+    "n_head_kv": 2,
+    "n_rep": 8,
+    "mla": false,
+    "mha": false,
+    "single_kv_head": false,
+    "gqa_conventions_disagree": true,
+    "grouped_pairing": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "interleaved_pairing": [
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1
+    ],
+    "n_vocab": 151936
+  },
+  "llama_cpp": "/home/reeds/llama.cpp",
+  "llama_cpp_commit": "3653e6d",
+  "threads": "1",
+  "floor": 0.12,
+  "topk": 10,
+  "builds": {
+    "fixed": "/tmp/opencode/t29/engine/target/release/slow-inference",
+    "kv_head_modulo": "/tmp/opencode/t29/mut-engine/target/release/slow-inference"
+  },
+  "cases": {
+    "capital": {
+      "tokens": [
+        785,
+        6722,
+        315,
+        9625,
+        374
+      ],
+      "builds": {
+        "fixed": {
+          "worst_rel_l2": 0.08106673147107755,
+          "worst_cosine": 0.9967101091989025,
+          "argmax_agreement": 4,
+          "n_positions": 5,
+          "within_floor": true,
+          "per_position": [
+            {
+              "rel_l2": 0.06669931685480958,
+              "cosine": 0.9977901390427041,
+              "argmax_engine": 2701,
+              "argmax_reference": 2701,
+              "argmax_match": true,
+              "top10_overlap": 0.8,
+              "engine_top1_top2_margin": 0.17259893616456376,
+              "reference_top1_top2_margin": 0.16575551908771846
+            },
+            {
+              "rel_l2": 0.057628325196082825,
+              "cosine": 0.9983596321494987,
+              "argmax_engine": 315,
+              "argmax_reference": 315,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.08780582346828522,
+              "reference_top1_top2_margin": 0.09013750715510906
+            },
+            {
+              "rel_l2": 0.08106673147107755,
+              "cosine": 0.9967101091989025,
+              "argmax_engine": 279,
+              "argmax_reference": 279,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.09175077280444649,
+              "reference_top1_top2_margin": 0.09089897963967386
+            },
+            {
+              "rel_l2": 0.04382563982520469,
+              "cosine": 0.9990401171214045,
+              "argmax_engine": 11,
+              "argmax_reference": 374,
+              "argmax_match": false,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.008638915735660965,
+              "reference_top1_top2_margin": 0.001482598934788481
+            },
+            {
+              "rel_l2": 0.049823704067116066,
+              "cosine": 0.9987820167716259,
+              "argmax_engine": 12095,
+              "argmax_reference": 12095,
+              "argmax_match": true,
+              "top10_overlap": 0.9,
+              "engine_top1_top2_margin": 0.11765931888708621,
+              "reference_top1_top2_margin": 0.12933492652772002
+            }
+          ],
+          "next_token_at_last_position": {
+            "reference": [
+              " Paris",
+              " __",
+              " a",
+              "____",
+              " ______",
+              ":\\n",
+              " the",
+              " located",
+              " also",
+              "\\n"
+            ],
+            "reference_ids": [
+              12095,
+              1304,
+              264,
+              2130,
+              32671,
+              510,
+              279,
+              7407,
+              1083,
+              198
+            ],
+            "engine": [
+              " Paris",
+              " a",
+              " __",
+              "____",
+              " located",
+              " ______",
+              " the",
+              " also",
+              " ____",
+              ":\\n"
+            ],
+            "engine_ids": [
+              12095,
+              264,
+              1304,
+              2130,
+              7407,
+              32671,
+              279,
+              1083,
+              30743,
+              510
+            ],
+            "top1_match": true,
+            "set_overlap": 0.9
+          }
+        },
+        "kv_head_modulo": {
+          "worst_rel_l2": 1.967152875909632,
+          "worst_cosine": -0.10544640211441264,
+          "argmax_agreement": 0,
+          "n_positions": 5,
+          "within_floor": false,
+          "per_position": [
+            {
+              "rel_l2": 1.218099326046654,
+              "cosine": -0.10544640211441264,
+              "argmax_engine": 220,
+              "argmax_reference": 2701,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.0801523550130834,
+              "reference_top1_top2_margin": 0.16575551908771846
+            },
+            {
+              "rel_l2": 1.967152875909632,
+              "cosine": 0.02904113140029906,
+              "argmax_engine": 64754,
+              "argmax_reference": 315,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.05275166946049018,
+              "reference_top1_top2_margin": 0.09013750715510906
+            },
+            {
+              "rel_l2": 1.0970846664575769,
+              "cosine": 0.16344758003445495,
+              "argmax_engine": 198,
+              "argmax_reference": 279,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.034032495078938824,
+              "reference_top1_top2_margin": 0.09089897963967386
+            },
+            {
+              "rel_l2": 1.607985364588382,
+              "cosine": -0.09505630934323463,
+              "argmax_engine": 99741,
+              "argmax_reference": 374,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.04474847647501706,
+              "reference_top1_top2_margin": 0.001482598934788481
+            },
+            {
+              "rel_l2": 1.1542892475625635,
+              "cosine": 0.2950538373405206,
+              "argmax_engine": 220,
+              "argmax_reference": 12095,
+              "argmax_match": false,
+              "top10_overlap": 0.1,
+              "engine_top1_top2_margin": 0.06939014523253083,
+              "reference_top1_top2_margin": 0.12933492652772002
+            }
+          ],
+          "next_token_at_last_position": {
+            "reference": [
+              " Paris",
+              " __",
+              " a",
+              "____",
+              " ______",
+              ":\\n",
+              " the",
+              " located",
+              " also",
+              "\\n"
+            ],
+            "reference_ids": [
+              12095,
+              1304,
+              264,
+              2130,
+              32671,
+              510,
+              279,
+              7407,
+              1083,
+              198
+            ],
+            "engine": [
+              " ",
+              " and",
+              " $",
+              " cl",
+              " in",
+              "6",
+              "\\n",
+              "sp",
+              "2",
+              " pur"
+            ],
+            "engine_ids": [
+              220,
+              323,
+              400,
+              1185,
+              304,
+              21,
+              198,
+              2154,
+              17,
+              3999
+            ],
+            "top1_match": false,
+            "set_overlap": 0.1
+          }
+        }
+      }
+    },
+    "moon": {
+      "tokens": [
+        641,
+        220,
+        16,
+        24,
+        21,
+        24,
+        11,
+        12677,
+        1156,
+        26120,
+        389,
+        279
+      ],
+      "builds": {
+        "fixed": {
+          "worst_rel_l2": 0.1292332481175865,
+          "worst_cosine": 0.9916296728107091,
+          "argmax_agreement": 12,
+          "n_positions": 12,
+          "within_floor": false,
+          "per_position": [
+            {
+              "rel_l2": 0.1292332481175865,
+              "cosine": 0.9916296728107091,
+              "argmax_engine": 264,
+              "argmax_reference": 264,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.038224040550274535,
+              "reference_top1_top2_margin": 0.01810757485176797
+            },
+            {
+              "rel_l2": 0.0495227692717075,
+              "cosine": 0.9987857091304266,
+              "argmax_engine": 16,
+              "argmax_reference": 16,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.005336892377412657,
+              "reference_top1_top2_margin": 0.010533687417611215
+            },
+            {
+              "rel_l2": 0.1288187973737785,
+              "cosine": 0.9916897758386621,
+              "argmax_engine": 24,
+              "argmax_reference": 24,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.07582737877738872,
+              "reference_top1_top2_margin": 0.06304821079039308
+            },
+            {
+              "rel_l2": 0.047524632692882214,
+              "cosine": 0.9989018676429086,
+              "argmax_engine": 24,
+              "argmax_reference": 24,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.02608660762478656,
+              "reference_top1_top2_margin": 0.0232071643741568
+            },
+            {
+              "rel_l2": 0.03694517561190207,
+              "cosine": 0.9993385742301759,
+              "argmax_engine": 15,
+              "argmax_reference": 15,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.012547193974147445,
+              "reference_top1_top2_margin": 0.013658462937328664
+            },
+            {
+              "rel_l2": 0.04363101818170071,
+              "cosine": 0.9990497068634449,
+              "argmax_engine": 11,
+              "argmax_reference": 11,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.18492215141941676,
+              "reference_top1_top2_margin": 0.1836583104438934
+            },
+            {
+              "rel_l2": 0.05096770374336726,
+              "cosine": 0.9987123073602776,
+              "argmax_engine": 279,
+              "argmax_reference": 279,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.04732628964697106,
+              "reference_top1_top2_margin": 0.05068370646725501
+            },
+            {
+              "rel_l2": 0.041196207752260725,
+              "cosine": 0.9991511087436259,
+              "argmax_engine": 1156,
+              "argmax_reference": 1156,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.039568721091799215,
+              "reference_top1_top2_margin": 0.036538989070643776
+            },
+            {
+              "rel_l2": 0.0368569251947593,
+              "cosine": 0.9993391965357906,
+              "argmax_engine": 738,
+              "argmax_reference": 738,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.0022245324403565776,
+              "reference_top1_top2_margin": 0.017955853498192006
+            },
+            {
+              "rel_l2": 0.04444627321248641,
+              "cosine": 0.9990801366061746,
+              "argmax_engine": 389,
+              "argmax_reference": 389,
+              "argmax_match": true,
+              "top10_overlap": 1.0,
+              "engine_top1_top2_margin": 0.2073574058560877,
+              "reference_top1_top2_margin": 0.21050940925472064
+            },
+            {
+              "rel_l2": 0.038705691040564205,
+              "cosine": 0.9992606624857282,
+              "argmax_engine": 279,
+              "argmax_reference": 279,
+              "argmax_match": true,
+              "top10_overlap": 0.9,
+              "engine_top1_top2_margin": 0.22609543212544186,
+              "reference_top1_top2_margin": 0.23116815294100018
+            },
+            {
+              "rel_l2": 0.03950549210942764,
+              "cosine": 0.9992557246792426,
+              "argmax_engine": 17788,
+              "argmax_reference": 17788,
+              "argmax_match": true,
+              "top10_overlap": 0.8,
+              "engine_top1_top2_margin": 0.09717725558367903,
+              "reference_top1_top2_margin": 0.09926775461471699
+            }
+          ],
+          "next_token_at_last_position": {
+            "reference": [
+              " moon",
+              " Moon",
+              " surface",
+              " lunar",
+              " Earth",
+              " planet",
+              " ______",
+              " far",
+              " __",
+              " earth"
+            ],
+            "reference_ids": [
+              17788,
+              17330,
+              7329,
+              56711,
+              9237,
+              11580,
+              32671,
+              3041,
+              1304,
+              9393
+            ],
+            "engine": [
+              " moon",
+              " Moon",
+              " surface",
+              " lunar",
+              " Earth",
+              " planet",
+              " ______",
+              " ___",
+              " _____",
+              " earth"
+            ],
+            "engine_ids": [
+              17788,
+              17330,
+              7329,
+              56711,
+              9237,
+              11580,
+              32671,
+              7436,
+              65892,
+              9393
+            ],
+            "top1_match": true,
+            "set_overlap": 0.8
+          }
+        },
+        "kv_head_modulo": {
+          "worst_rel_l2": 2.0592289381113034,
+          "worst_cosine": -0.2952978413700323,
+          "argmax_agreement": 1,
+          "n_positions": 12,
+          "within_floor": false,
+          "per_position": [
+            {
+              "rel_l2": 1.3911989237638827,
+              "cosine": -0.2952978413700323,
+              "argmax_engine": 220,
+              "argmax_reference": 264,
+              "argmax_match": false,
+              "top10_overlap": 0.1,
+              "engine_top1_top2_margin": 0.043875572325022955,
+              "reference_top1_top2_margin": 0.01810757485176797
+            },
+            {
+              "rel_l2": 1.0872853438335712,
+              "cosine": 0.2059609257479194,
+              "argmax_engine": 77,
+              "argmax_reference": 16,
+              "argmax_match": false,
+              "top10_overlap": 0.1,
+              "engine_top1_top2_margin": 0.0032940536860193172,
+              "reference_top1_top2_margin": 0.010533687417611215
+            },
+            {
+              "rel_l2": 1.2094893242277924,
+              "cosine": 0.45095922097597113,
+              "argmax_engine": 220,
+              "argmax_reference": 24,
+              "argmax_match": false,
+              "top10_overlap": 0.1,
+              "engine_top1_top2_margin": 0.02466179170385054,
+              "reference_top1_top2_margin": 0.06304821079039308
+            },
+            {
+              "rel_l2": 2.0592289381113034,
+              "cosine": 0.2821339124309125,
+              "argmax_engine": 70467,
+              "argmax_reference": 24,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.005490402677501747,
+              "reference_top1_top2_margin": 0.0232071643741568
+            },
+            {
+              "rel_l2": 1.1632827621907447,
+              "cosine": 0.5298892330371646,
+              "argmax_engine": 15,
+              "argmax_reference": 15,
+              "argmax_match": true,
+              "top10_overlap": 0.3,
+              "engine_top1_top2_margin": 0.11652670293949825,
+              "reference_top1_top2_margin": 0.013658462937328664
+            },
+            {
+              "rel_l2": 1.8359676642684697,
+              "cosine": -0.2350181099947324,
+              "argmax_engine": 79,
+              "argmax_reference": 11,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.046545951950370396,
+              "reference_top1_top2_margin": 0.1836583104438934
+            },
+            {
+              "rel_l2": 1.3583939331464443,
+              "cosine": -0.126220569237301,
+              "argmax_engine": 220,
+              "argmax_reference": 279,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.04247106724915438,
+              "reference_top1_top2_margin": 0.05068370646725501
+            },
+            {
+              "rel_l2": 1.63103035262156,
+              "cosine": 0.2794905019821788,
+              "argmax_engine": 99621,
+              "argmax_reference": 1156,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.04960521540722562,
+              "reference_top1_top2_margin": 0.036538989070643776
+            },
+            {
+              "rel_l2": 1.1065920046634508,
+              "cosine": 0.48563529991492105,
+              "argmax_engine": 71600,
+              "argmax_reference": 738,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.06873646330143528,
+              "reference_top1_top2_margin": 0.017955853498192006
+            },
+            {
+              "rel_l2": 1.366182606569596,
+              "cosine": 0.3435629013505013,
+              "argmax_engine": 220,
+              "argmax_reference": 389,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.2650375345415666,
+              "reference_top1_top2_margin": 0.21050940925472064
+            },
+            {
+              "rel_l2": 1.05823553529752,
+              "cosine": 0.4416101561782803,
+              "argmax_engine": 85,
+              "argmax_reference": 279,
+              "argmax_match": false,
+              "top10_overlap": 0.1,
+              "engine_top1_top2_margin": 0.05439718736577916,
+              "reference_top1_top2_margin": 0.23116815294100018
+            },
+            {
+              "rel_l2": 1.0412849802301771,
+              "cosine": 0.429283564422685,
+              "argmax_engine": 3355,
+              "argmax_reference": 17788,
+              "argmax_match": false,
+              "top10_overlap": 0.0,
+              "engine_top1_top2_margin": 0.0029573621001105417,
+              "reference_top1_top2_margin": 0.09926775461471699
+            }
+          ],
+          "next_token_at_last_position": {
+            "reference": [
+              " moon",
+              " Moon",
+              " surface",
+              " lunar",
+              " Earth",
+              " planet",
+              " ______",
+              " far",
+              " __",
+              " earth"
+            ],
+            "reference_ids": [
+              17788,
+              17330,
+              7329,
+              56711,
+              9237,
+              11580,
+              32671,
+              3041,
+              1304,
+              9393
+            ],
+            "engine": [
+              " ''",
+              "\"",
+              "''",
+              "\"\"",
+              " <",
+              " ",
+              "1",
+              " \\n",
+              " \\n\\n",
+              "  "
+            ],
+            "engine_ids": [
+              3355,
+              1,
+              4605,
+              3014,
+              366,
+              220,
+              16,
+              715,
+              4710,
+              256
+            ],
+            "top1_match": false,
+            "set_overlap": 0.0
+          }
+        }
+      }
+    }
+  },
+  "separation": {
+    "capital": {
+      "closest_build": "fixed",
+      "closest_worst_rel_l2": 0.08106673147107755,
+      "furthest_build": "kv_head_modulo",
+      "furthest_worst_rel_l2": 1.967152875909632,
+      "ratio": 24.265846669930927,
+      "floor_margin_of_closest": 1.4802619745784718
+    },
+    "moon": {
+      "closest_build": "fixed",
+      "closest_worst_rel_l2": 0.1292332481175865,
+      "furthest_build": "kv_head_modulo",
+      "furthest_worst_rel_l2": 2.0592289381113034,
+      "ratio": 15.934203992440523,
+      "floor_margin_of_closest": 0.9285536171838275
+    }
+  }
+}

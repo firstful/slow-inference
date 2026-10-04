@@ -1,0 +1,31 @@
+// F32 matvec: direct dot product (no dequant needed)
+// Each invocation handles one output row
+
+#version 460
+
+layout(local_size_x = 64) in;
+
+layout(binding = 0, std430) readonly buffer WeightBuf { float w[]; };
+layout(binding = 1, std430) readonly buffer ActBuf    { float x[]; };
+layout(binding = 2, std430) buffer OutBuf     { float y[]; };
+
+layout(push_constant) uniform Params {
+    uint row_elems;
+    uint row_bytes;
+    uint n_rows;
+    uint start_row;
+} params;
+
+void main() {
+    uint bid = gl_GlobalInvocationID.x;
+    if (bid >= params.n_rows) return;
+
+    uint row_idx = params.start_row + bid;
+    uint boff    = row_idx * params.row_elems; // f32 stride = elems
+
+    float sum = 0.0;
+    for (uint i = 0u; i < params.row_elems; i++) {
+        sum += w[boff + i] * x[i];
+    }
+    y[bid] = sum;
+}

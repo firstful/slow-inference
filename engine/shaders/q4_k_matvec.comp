@@ -1,0 +1,136 @@
+// Q4_K matvec: dequant + dot product in one shader
+// Q4_K block: 256 elems, 144 bytes
+// Layout per block (144 bytes):
+//   [0..2)   d      f16 super-block scale
+//   [2..4)   dmin   f16 super-block min scale
+//   [4..16)  scales 12 bytes (8 scale/min pairs packed)
+//   [16..144) qs    128 bytes = 256 4-bit quants
+
+#version 460
+
+layout(local_size_x = 64) in;
+
+layout(binding = 0, std430) readonly buffer WeightBuf { uint w[]; };
+layout(binding = 1, std430) readonly buffer ActBuf    { float x[]; };
+layout(binding = 2, std430) buffer OutBuf     { float y[]; };
+
+layout(push_constant) uniform Params {
+    uint row_elems;
+    uint row_bytes;
+    uint n_rows;
+    uint start_row;
+} params;
+
+float f16tof32(uint v) {
+    uint sign  = (v & 0x8000u) << 16;
+    uint exp   = (v & 0x7C00u) >> 10;
+    uint frac  = v & 0x03FFu;
+    if (exp == 0)
+        return uintBitsToFloat(sign | ((127u - 15u) << 23) | frac << 13) * 6.1035156e-5;
+    else if (exp == 31)
+        return uintBitsToFloat(sign | 0x7F800000u | frac << 13);
+    return uintBitsToFloat(sign | ((exp - 15u + 127u) << 23) | frac << 13);
+}
+
+// Read N bytes starting at byte-offset boff, return as uint32 (zero-extended)
+uint read_dword_aligned(uint boff) {
+    uint doff = boff / 4u;
+    uint shift = (boff % 4u) * 8u;
+    uint lo = w[doff] >> shift;
+    uint hi = (shift == 0u) ? 0u : (w[doff + 1u] << (32u - shift));
+    return lo | hi;
+}
+
+// Read 2 bytes as uint16
+uint read_u16(uint boff) {
+    return read_dword_aligned(boff) & 0xFFFFu;
+}
+
+// Read 1 byte as uint8
+uint read_u8(uint boff) {
+    return read_dword_aligned(boff) & 0xFFu;
+}
+
+// Scale extraction matching get_scale_min_k4 in quant.rs
+// sc_bytes[0..11] are the 12 scale bytes, idx in 0..7
+vec2 unpack_scales(uint idx, uint sc0, uint sc1, uint sc2, uint sc3,
+                   uint sc4, uint sc5, uint sc6, uint sc7) {
+    vec2 res;
+    if (idx < 4u) {
+        // First 4: s = sc[idx] & 0x3F, m = sc[idx+4] & 0x3F
+        uint s_bytes[4] = uint[](sc0, sc1, sc2, sc3);
+        uint m_bytes[4] = uint[](sc4, sc5, sc6, sc7);
+        res.x = float(s_bytes[idx] & 0x3Fu);
+        res.y = float(m_bytes[idx] & 0x3Fu);
+    } else {
+        // idx >= 4
+        // s = (sc[idx+4] & 0x0F) | ((sc[idx-4] >> 6) << 4)
+        // m = (sc[idx+4] >> 4) | ((sc[idx] >> 6) << 4)
+        uint s_idx4 = idx - 4u;
+        uint s_byte4 = (s_idx4 == 0u) ? sc4 : (s_idx4 == 1u) ? sc5 : (s_idx4 == 2u) ? sc6 : sc7;
+        uint s_byte0 = (s_idx4 == 0u) ? sc0 : (s_idx4 == 1u) ? sc1 : (s_idx4 == 2u) ? sc2 : sc3;
+        res.x = float((s_byte4 & 0x0Fu) | ((s_byte0 >> 6u) << 4u));
+        res.y = float((s_byte4 >> 4u) | ((s_byte0 >> 6u) << 4u));
+    }
+    // Apply bias: stored value is 0..63, actual is value - 32
+    return res - vec2(32.0, 32.0);
+}
+
+void main() {
+    uint bid = gl_GlobalInvocationID.x;
+    if (bid >= params.n_rows) return;
+
+    uint row_boff = (params.start_row + bid) * params.row_bytes;
+    uint n_blk = params.row_elems / 256u;
+
+    float sum = 0.0;
+
+    for (uint bk = 0u; bk < n_blk; bk++) {
+        uint blk_boff = row_boff + bk * 144u;
+
+        // d and dmin: f16 at bytes 0-1 and 2-3
+        float d = f16tof32(read_u16(blk_boff + 0u));
+        float dmin = f16tof32(read_u16(blk_boff + 2u));
+
+        // Load 12 scale bytes
+        uint sc[12];
+        for (uint i = 0u; i < 12u; i++) {
+            sc[i] = read_u8(blk_boff + 4u + i);
+        }
+
+        // Process 4 groups of 64 elements
+        for (uint g = 0u; g < 4u; g++) {
+            uint idx0 = 2u * g;
+            uint idx1 = 2u * g + 1u;
+
+            vec2 sm0 = unpack_scales(idx0, sc[0], sc[1], sc[2], sc[3], sc[4], sc[5], sc[6], sc[7]);
+            vec2 sm1 = unpack_scales(idx1, sc[0], sc[1], sc[2], sc[3], sc[4], sc[5], sc[6], sc[7]);
+
+            float d0 = d * sm0.x;
+            float m0 = dmin * sm0.y;
+            float d1 = d * sm1.x;
+            float m1 = dmin * sm1.y;
+
+            // qs starts at byte 16, 128 bytes total = 32 bytes per group
+            // Each byte holds 2 quants: low nibble first 32 elems, high nibble next 32 elems
+            uint qs_base = blk_boff + 16u + g * 32u;
+
+            // Process 32 bytes -> 64 quants
+            for (uint i = 0u; i < 32u; i++) {
+                uint q_byte = read_u8(qs_base + i);
+                uint q0 = q_byte & 0xFu;       // low nibble
+                uint q1 = (q_byte >> 4u) & 0xFu; // high nibble
+
+                // Low nibble: first 32 outputs of group
+                uint eo_low = bk * 256u + g * 64u + i;
+                sum += (d0 * float(q0) - m0) * x[eo_low];
+
+                // High nibble: next 32 outputs of group
+                uint eo_high = bk * 256u + g * 64u + 32u + i;
+                sum += (d1 * float(q1) - m1) * x[eo_high];
+            }
+        }
+    }
+
+    y[bid] = sum;
+}

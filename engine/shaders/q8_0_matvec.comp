@@ -1,0 +1,70 @@
+// Q8_0 matvec: dequant + dot product in one shader
+// Q8_0 block: 32 elems, 34 bytes (f16 scale + 32 × int8)
+// Blocks straddle dword boundaries (34 bytes ≠ multiple of 4)
+// We handle this by computing byte-addressable uint32 reads.
+
+#version 460
+
+layout(local_size_x = 64) in;
+
+layout(binding = 0, std430) readonly buffer WeightBuf { uint w[]; };
+layout(binding = 1, std430) readonly buffer ActBuf    { float x[]; };
+layout(binding = 2, std430) buffer OutBuf     { float y[]; };
+
+layout(push_constant) uniform Params {
+    uint row_elems;
+    uint row_bytes;
+    uint n_rows;
+    uint start_row;
+} params;
+
+float f16tof32(uint v) {
+    uint sign  = (v & 0x8000u) << 16;
+    uint exp   = (v & 0x7C00u) >> 10;
+    uint frac  = v & 0x03FFu;
+    if (exp == 0)
+        return uintBitsToFloat(sign | ((127u - 15u) << 23) | frac << 13) * 6.1035156e-5;
+    else if (exp == 31)
+        return uintBitsToFloat(sign | 0x7F800000u | frac << 13);
+    return uintBitsToFloat(sign | ((exp - 15u + 127u) << 23) | frac << 13);
+}
+
+// Read N bytes starting at byte-offset boff, return as uint32 (zero-extended)
+uint read_dword_aligned(uint boff) {
+    uint doff = boff / 4u;
+    uint shift = (boff % 4u) * 8u;
+    uint lo = w[doff] >> shift;
+    uint hi = (shift == 0u) ? 0u : (w[doff + 1u] << (32u - shift));
+    return lo | hi;
+}
+
+void main() {
+    uint bid = gl_GlobalInvocationID.x;
+    if (bid >= params.n_rows) return;
+
+    uint row_boff = (params.start_row + bid) * params.row_bytes;
+    uint n_blk = params.row_elems / 32u;
+
+    float sum = 0.0;
+    for (uint bk = 0u; bk < n_blk; bk++) {
+        uint blk_boff = row_boff + bk * 34u;
+
+        // Scale: f16 at bytes 0-1
+        float d = f16tof32(read_dword_aligned(blk_boff) & 0xFFFFu);
+
+        // qs: 32 int8 values starting at byte 2, packed as 8 × uint32
+        for (uint i = 0u; i < 8u; i++) {
+            uint packed = read_dword_aligned(blk_boff + 2u + i * 4u);
+            ivec4 q;
+            q.x = int(packed & 0xFFu); if (q.x > 127) q.x -= 256;
+            q.y = int((packed >> 8u) & 0xFFu); if (q.y > 127) q.y -= 256;
+            q.z = int((packed >> 16u) & 0xFFu); if (q.z > 127) q.z -= 256;
+            q.w = int((packed >> 24u) & 0xFFu); if (q.w > 127) q.w -= 256;
+
+            uint eo = bk * 32u + i * 4u;
+            sum += d * (float(q.x) * x[eo] + float(q.y) * x[eo+1u] + float(q.z) * x[eo+2u] + float(q.w) * x[eo+3u]);
+        }
+    }
+
+    y[bid] = sum;
+}

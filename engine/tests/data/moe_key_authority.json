@@ -1,0 +1,2267 @@
+{
+ "archs": {
+  "afmoe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_afmoe",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "afmoe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "apertus": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_apertus",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "arcee": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_arcee",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "arctic": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_arctic",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "arctic.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "arwkv7": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_arwkv7",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "baichuan": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_baichuan",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "bailingmoe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_bailingmoe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "bailingmoe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "bailingmoe2": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_bailingmoe2",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "bailingmoe2.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "bert": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_bert",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "bert.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "bitnet": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_bitnet",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "bloom": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_bloom",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "chameleon": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_chameleon",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "chatglm": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_chatglm",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "codeshell": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_codeshell",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "cogvlm": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_cogvlm",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "cohere2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_cohere2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "cohere2moe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_cohere2moe",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "cohere2moe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "command-r": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_command_r",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "dbrx": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_dbrx",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "dbrx.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "deci": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_deci",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "deepseek": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_deepseek",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "deepseek.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "deepseek2": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_deepseek2",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "deepseek2.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "deepseek2-ocr": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_deepseek2ocr",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_chain": "llama_model_deepseek2ocr <- llama_model_deepseek2",
+   "graph_in": "deepseek2.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "deepseek32": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_deepseek32",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "deepseek32.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "deepseek4": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_deepseek4",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "deepseek4.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "dflash": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_dflash",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "dflash.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "dots1": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_dots1",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "dots1.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "dream": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_dream",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "eagle3": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_eagle3",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "ernie4_5": {
+   "any_key_read": true,
+   "builds_moe": false,
+   "class": "llama_model_ernie4_5",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "ernie4_5-moe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_ernie4_5_moe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "ernie4-5-moe.cpp",
+   "inherits": "llama_model_ernie4_5",
+   "key_chain": {
+    "expert_shared_feed_forward_length": "llama_model_ernie4_5_moe <- llama_model_ernie4_5"
+   },
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "eurobert": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_eurobert",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "exaone": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_exaone",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "exaone-moe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_exaone_moe",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "exaone-moe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "exaone4": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_exaone4",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "falcon": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_falcon",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "falcon-h1": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_falcon_h1",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "gemma": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_gemma",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "gemma-embedding": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_gemma_embedding",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "gemma2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_gemma2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "gemma3": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_gemma3",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "gemma3n": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_gemma3n",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "gemma4": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_gemma4",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "gemma4.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "expr:1.0f"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "gemma4-assistant": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_gemma4_assistant",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "glm-dsa": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_glm_dsa",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "glm-dsa.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "glm4": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_glm4",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "glm4moe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_glm4_moe",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "glm4-moe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "gpt-oss": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_openai_moe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX_WEIGHT"
+   ],
+   "graph_in": "openai-moe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "gpt2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_gpt2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "gptneox": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_gptneox",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "granite": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_granite",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "granite.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "granitehybrid": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_granite_hybrid",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "granite-hybrid.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "granitemoe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_granite_moe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_chain": "llama_model_granite_moe <- llama_model_granite",
+   "graph_in": "granite.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "grok": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_grok",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "grok.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "grovemoe": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_grovemoe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "grovemoe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "hunyuan-dense": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_hunyuan_dense",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_hunyuan_vl"
+  },
+  "hunyuan-moe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_hunyuan_moe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "hunyuan-moe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "hunyuan_vl": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_hunyuan_vl",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "hy_v3": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_hy_v3",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "hy-v3.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "internlm2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_internlm2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "jais": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_jais",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "jais2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_jais2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "jamba": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_jamba",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "jamba.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "jina-bert-v2": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_jina_bert_v2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_chain": "llama_model_jina_bert_v2 <- llama_model_bert",
+   "graph_in": "bert.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "jina-bert-v3": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_jina_bert_v3",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_chain": "llama_model_jina_bert_v3 <- llama_model_bert",
+   "graph_in": "bert.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "kimi-linear": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_kimi_linear",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "kimi-linear.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "laguna": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_laguna",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "laguna.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "lfm2": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_lfm2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "expr:static_cast<llama_expert_gating_func_typ"
+   ],
+   "graph_in": "lfm2.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "lfm2moe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_lfm2moe",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "expr:static_cast<llama_expert_gating_func_typ"
+   ],
+   "graph_chain": "llama_model_lfm2moe <- llama_model_lfm2",
+   "graph_in": "lfm2.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "llada": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_llada",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "llada-moe": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_llada_moe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "llada-moe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "llama": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_llama",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "llama.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "llama-embed": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_llama_embed",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_chain": "llama_model_llama_embed <- llama_model_llama",
+   "graph_in": "llama.cpp",
+   "inherits": "llama_model_llama",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "llama4": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_llama4",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SIGMOID"
+   ],
+   "graph_in": "llama4.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "maincoder": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_maincoder",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "mamba": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_mamba",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "mamba2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_mamba2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "mellum": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_mellum",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "mellum.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "mimo2": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_mimo2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SIGMOID"
+   ],
+   "graph_in": "mimo2.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "minicpm": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_minicpm",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_chain": "llama_model_minicpm <- llama_model_granite",
+   "graph_in": "granite.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "minicpm3": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_minicpm3",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "minimax-m2": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_minimax_m2",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "minimax-m2.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "minimax-m3": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_minimax_m3",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "minimax-m3.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "mistral3": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_mistral3",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "mistral3.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "mistral4": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_mistral4",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_chain": "llama_model_mistral4 <- llama_model_deepseek2",
+   "graph_in": "deepseek2.cpp",
+   "inherits": "llama_model_deepseek2",
+   "key_chain": {
+    "expert_gating_func": "llama_model_mistral4 <- llama_model_deepseek2",
+    "expert_weights_norm": "llama_model_mistral4 <- llama_model_deepseek2",
+    "expert_weights_scale": "llama_model_mistral4 <- llama_model_deepseek2"
+   },
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "modern-bert": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_modern_bert",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "mpt": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_mpt",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "nanbeige": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_nanbeige",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "nemotron": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_nemotron",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "nemotron_h": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_nemotron_h",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "gating:SIGMOID"
+   ],
+   "graph_in": "nemotron-h.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "nemotron_h_moe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_nemotron_h_moe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "gating:SIGMOID"
+   ],
+   "graph_chain": "llama_model_nemotron_h_moe <- llama_model_nemotron_h",
+   "graph_in": "nemotron-h.cpp",
+   "inherits": "llama_model_nemotron_h",
+   "key_chain": {
+    "expert_shared_feed_forward_length": "llama_model_nemotron_h_moe <- llama_model_nemotron_h",
+    "expert_weights_norm": "llama_model_nemotron_h_moe <- llama_model_nemotron_h",
+    "expert_weights_scale": "llama_model_nemotron_h_moe <- llama_model_nemotron_h"
+   },
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "neo-bert": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_neo_bert",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "nomic-bert": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_nomic_bert",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_chain": "llama_model_nomic_bert <- llama_model_bert",
+   "graph_in": "bert.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "nomic-bert-moe": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_nomic_bert_moe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_chain": "llama_model_nomic_bert_moe <- llama_model_bert",
+   "graph_in": "bert.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "olmo": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_olmo",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "olmo2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_olmo2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "olmoe": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_olmoe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "olmoe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "openelm": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_openelm",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "orion": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_orion",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "paddleocr": {
+   "any_key_read": true,
+   "builds_moe": false,
+   "class": "llama_model_paddleocr",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_ernie4_5",
+   "key_chain": {
+    "expert_shared_feed_forward_length": "llama_model_paddleocr <- llama_model_ernie4_5"
+   }
+  },
+  "pangu-embedded": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_pangu_embed",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "phi2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_phi2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "phi3": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_phi3",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "phi3.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "phimoe": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_phimoe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_chain": "llama_model_phimoe <- llama_model_phi3",
+   "graph_in": "phi3.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "plamo": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_plamo",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "plamo2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_plamo2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "plamo3": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_plamo3",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "plm": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_plm",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "qwen": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_qwen",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "qwen2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_qwen2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "qwen2moe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_qwen2moe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "qwen2moe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_false"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "qwen2vl": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_qwen2vl",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "qwen3": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_qwen3",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "qwen35": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_qwen35",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "qwen35moe": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_qwen35moe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "qwen35moe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "qwen3moe": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_qwen3moe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "qwen3moe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "qwen3next": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_qwen3next",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "qwen3next.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "qwen3tts": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_qwen3tts",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_qwen3vl"
+  },
+  "qwen3vl": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_qwen3vl",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "qwen3vlmoe": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_qwen3vlmoe",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "qwen3vlmoe.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "refact": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_refact",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "rnd1": {
+   "any_key_read": false,
+   "builds_moe": true,
+   "class": "llama_model_rnd1",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "gating:SOFTMAX"
+   ],
+   "graph_in": "rnd1.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "rwkv6": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_rwkv6",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "rwkv6qwen2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_rwkv6qwen2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "rwkv7": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_rwkv7",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "seed_oss": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_seed_oss",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "smallthinker": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_smallthinker",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "gating_op": [
+    "expr:static_cast<llama_expert_gating_func_typ"
+   ],
+   "graph_in": "smallthinker.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "literal_true"
+   ],
+   "norm_w_key_is_live": false,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": false
+  },
+  "smollm3": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_smollm3",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "stablelm": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_stablelm",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "starcoder": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_starcoder",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "starcoder2": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_starcoder2",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "step35": {
+   "any_key_read": true,
+   "builds_moe": true,
+   "class": "llama_model_step35",
+   "expert_gating_func": true,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": true,
+   "expert_weights_norm": true,
+   "expert_weights_scale": true,
+   "gating_op": [
+    "key:expert_gating_func"
+   ],
+   "graph_in": "step35.cpp",
+   "inherits": "llama_model_base",
+   "norm_w": [
+    "key:expert_weights_norm"
+   ],
+   "norm_w_key_is_live": true,
+   "w_scale": [
+    "key:expert_weights_scale"
+   ],
+   "w_scale_key_is_live": true
+  },
+  "t5": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_t5",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "t5encoder": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_t5encoder",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "talkie": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_talkie",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "wavtokenizer-dec": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_wavtokenizer_dec",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  },
+  "xverse": {
+   "any_key_read": false,
+   "builds_moe": false,
+   "class": "llama_model_xverse",
+   "expert_gating_func": false,
+   "expert_groups": false,
+   "expert_shared_feed_forward_length": false,
+   "expert_weights_norm": false,
+   "expert_weights_scale": false,
+   "inherits": "llama_model_base"
+  }
+ },
+ "generator": "scripts/gen_moe_key_authority.py",
+ "llama_cpp_commit": "3653e6d",
+ "not_read_means": {
+  "expert_gating_func": "NONE (0), which build_moe_ffn aborts on -- each arch resolves it first",
+  "expert_weights_norm": "false (llama-hparams.h:101)",
+  "expert_weights_scale": "0.0f = 'unset' (llama-hparams.h:100); build_moe_ffn skips 0 and 1"
+ },
+ "question": "Per GGUF architecture string: (a) does the model class's load_hparams -- its own, or an inherited one when the subclass does not override it -- call ml.get_key(LLM_KV_*, hparams.<field>, ...)? (b) what does build_moe_ffn receive for norm_w (arg 9), w_scale (arg 10) and gating_op (arg 11) at that architecture's call sites?"
+}

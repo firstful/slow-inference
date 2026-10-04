@@ -1,0 +1,534 @@
+//! Dequantization kernels for GGML quant formats -> f32.
+//!
+//! Ported from the Python prototype in py-reference/src/quant.py, which was
+//! validated BIT-EXACT against gguf-py's dequantize on real model tensors
+//! (Tiny-Moe Q4_K + Q6_K rows, max abs err 0.00e+00).
+//! Layouts follow ggml/src/ggml-quants.c dequantize_row_* exactly.
+//!
+//! PR-1: Added Q2_K, Q3_K, Q5_K, Q8_K dequant + BF16 passthrough.
+//! Fixed Q8_K type_layout from (4,8) to (292,256) in gguf.rs.
+
+use std::io::{self, Read, Seek, SeekFrom};
+
+use crate::gguf::{
+    GGML_BF16, GGML_F16, GGML_F32, GGML_Q2_K, GGML_Q3_K, GGML_Q4_K, GGML_Q5_K, GGML_Q6_K,
+    GGML_Q8_0, GGML_Q8_K, type_layout,
+};
+
+fn f16_to_f32(bits: u16) -> f32 {
+    // IEEE half -> single, bit-exact arithmetic port
+    let sign = ((bits & 0x8000) as u32) << 16;
+    let exp = ((bits & 0x7C00) >> 10) as u32;
+    let frac = (bits & 0x03FF) as u32;
+    let out = if exp == 0 {
+        // subnormal half -> subnormal single: value = frac * 2^-24
+        (frac as f32 * 2f32.powi(-24)).to_bits()
+    } else if exp == 31 {
+        if frac == 0 {
+            0x7F80_0000 // inf
+        } else {
+            0x7FC0_0000 | frac // NaN
+        }
+    } else {
+        ((exp - 15 + 127) << 23) | (frac << 13)
+    };
+    f32::from_bits(sign | out)
+}
+
+/// Dequantize ONE row of `ne0` elements. `raw` holds exactly the row's bytes.
+/// Returns a fresh Vec<f32> of length ne0.
+pub fn dequant_row(raw: &[u8], dtype: u32, ne0: usize) -> io::Result<Vec<f32>> {
+    match dtype {
+        GGML_F32 => Ok(raw[..ne0 * 4]
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect()),
+        GGML_F16 => Ok(raw[..ne0 * 2]
+            .chunks_exact(2)
+            .map(|c| f16_to_f32(u16::from_le_bytes(c.try_into().unwrap())))
+            .collect()),
+        GGML_BF16 => {
+            // BF16 -> F32: left-shift by 16 bits (same as F32 but low 16 bits are zero)
+            Ok(raw[..ne0 * 2]
+                .chunks_exact(2)
+                .map(|c| {
+                    let bits = u16::from_le_bytes(c.try_into().unwrap()) as u32;
+                    f32::from_bits(bits << 16)
+                })
+                .collect())
+        }
+        GGML_Q8_0 => q8_0(raw, ne0),
+        GGML_Q8_K => q8_k(raw, ne0),
+        GGML_Q2_K => q2_k(raw, ne0),
+        GGML_Q3_K => q3_k(raw, ne0),
+        GGML_Q4_K => q4_k(raw, ne0),
+        GGML_Q5_K => q5_k(raw, ne0),
+        GGML_Q6_K => q6_k(raw, ne0),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("dequant for ggml type {dtype} not implemented"),
+        )),
+    }
+}
+
+// ---- Q8_0 (legacy, 32-elem block, 34 bytes) --------------------------------
+
+fn q8_0(raw: &[u8], ne0: usize) -> io::Result<Vec<f32>> {
+    let nblk = ne0 / 32;
+    let mut out = vec![0f32; ne0];
+    for b in 0..nblk {
+        let off = b * 34;
+        let d = f16_to_f32(u16::from_le_bytes(raw[off..off + 2].try_into().unwrap()));
+        for i in 0..32 {
+            let q = raw[off + 2 + i] as i8 as f32;
+            out[b * 32 + i] = q * d;
+        }
+    }
+    Ok(out)
+}
+
+// ---- Q8_K (256-elem block, 292 bytes: f32 d, i8[256] qs, i16[16] bsums) ----
+
+fn q8_k(raw: &[u8], ne0: usize) -> io::Result<Vec<f32>> {
+    // block_q8_K: float d, int8_t qs[QK_K], int16_t bsums[QK_K/16]
+    // Verified against ggml-common.h static_assert: sizeof = 4 + 256 + 32 = 292
+    let nblk = ne0 / 256;
+    let mut out = vec![0f32; ne0];
+    for b in 0..nblk {
+        let off = b * 292;
+        // d is f32 (not f16!)
+        let d = f32::from_le_bytes(raw[off..off + 4].try_into().unwrap());
+        let qs_start = off + 4;
+        for j in 0..256 {
+            let q = raw[qs_start + j] as i8 as f32;
+            out[b * 256 + j] = q * d;
+        }
+    }
+    Ok(out)
+}
+
+// ---- Q2_K (256-elem block, 84 bytes: 2B d, 2B dmin, 16B scales, 64B qs) ----
+
+fn q2_k(raw: &[u8], ne0: usize) -> io::Result<Vec<f32>> {
+    // block_q2_K layout:
+    //   [0..2)   d       f16 super-block scale
+    //   [2..4)   dmin    f16 super-block scale for mins
+    //   [4..20)  scales  16B (8 pairs of (scale, min) packed as (lo nibble, hi nibble))
+    //   [20..84) qs      64B (256 quants, 2 bits each)
+    //
+    // Per 128-elem half: 32B of q data, parsed in 4 groups of 32 bits (16 elems each x2).
+    //   is = 0..7 scales: each byte = (scale & 0xF) | ((min & 0xF) << 4)
+    //   For group j (0..3 per half): shift = j*2, pick contiguous 16-elem pairs
+    let nblk = ne0 / 256;
+    let mut out = vec![0f32; ne0];
+    let mut pos = 0usize;
+    for b in 0..nblk {
+        let off = b * 84;
+        let d = f16_to_f32(u16::from_le_bytes(raw[off..off + 2].try_into().unwrap()));
+        let dmin = f16_to_f32(u16::from_le_bytes(
+            raw[off + 2..off + 4].try_into().unwrap(),
+        ));
+        let sc = &raw[off + 4..off + 20];
+        let qs = &raw[off + 20..off + 84];
+
+        // Two 128-elem halves
+        for half in 0..2 {
+            let q_half = &qs[half * 32..(half + 1) * 32];
+            for j in 0..4 {
+                let sc_byte = sc[half * 4 + j];
+                let dl = d * (sc_byte & 0xF) as f32;
+                let ml = dmin * ((sc_byte >> 4) as f32);
+                let shift = (j * 2) as u8;
+
+                // Group A: first 16 elems from q[0..16]
+                for l in 0..16 {
+                    let q = ((q_half[l] >> shift) & 3) as i8;
+                    out[pos] = dl * q as f32 - ml;
+                    pos += 1;
+                }
+                // Group B: second 16 elems from q[16..32]
+                for l in 0..16 {
+                    let q = ((q_half[16 + l] >> shift) & 3) as i8;
+                    out[pos] = dl * q as f32 - ml;
+                    pos += 1;
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+// ---- Q3_K (256-elem block, 110 bytes: 2B d, 64B qs, 32B hmask, 12B scales) -
+
+fn q3_k(raw: &[u8], ne0: usize) -> io::Result<Vec<f32>> {
+    // block_q3_K layout:
+    //   [0..2)    d        f16 super-block scale
+    //   [2..66)   qs       64B (256 low 2-bit quants, packed as 4 bits per byte)
+    //   [66..98)  hmask    32B (256 high bit masks, 1 bit per element)
+    //   [98..110) scales   12B (16 packed scales, 6 bits each)
+    let nblk = ne0 / 256;
+    let mut out = vec![0f32; ne0];
+    let mut pos = 0usize;
+    for b in 0..nblk {
+        let off = b * 110;
+        let d_all = f16_to_f32(u16::from_le_bytes(raw[off..off + 2].try_into().unwrap()));
+        let qs = &raw[off + 2..off + 66];
+        let hm = &raw[off + 66..off + 98]; // 32 bytes, shared across both halves
+        let scale_raw = &raw[off + 98..off + 110];
+
+        // Decode 12 bytes into 16 signed int8 scales: match ggml-quants.c logic
+        let kmask1: u32 = 0x03030303;
+        let kmask2: u32 = 0x0f0f0f0f;
+
+        let mut aux = [0u32; 4];
+        aux[0] = u32::from_le_bytes(scale_raw[0..4].try_into().unwrap());
+        aux[1] = u32::from_le_bytes(scale_raw[4..8].try_into().unwrap());
+        aux[2] = u32::from_le_bytes(scale_raw[8..12].try_into().unwrap());
+
+        let tmp = aux[2];
+        let new_aux0 = (aux[0] & kmask2) | (((tmp >> 0) & kmask1) << 4);
+        let new_aux1 = (aux[1] & kmask2) | (((tmp >> 2) & kmask1) << 4);
+        let new_aux2 = ((aux[0] >> 4) & kmask2) | (((tmp >> 4) & kmask1) << 4);
+        let new_aux3 = ((aux[1] >> 4) & kmask2) | (((tmp >> 6) & kmask1) << 4);
+
+        // Extract bytes as signed int8, then subtract 32
+        let mut s = [0i8; 16];
+        for i in 0..4 {
+            s[i] = (new_aux0.to_le_bytes()[i] as i8) - 32;
+            s[4 + i] = (new_aux1.to_le_bytes()[i] as i8) - 32;
+            s[8 + i] = (new_aux2.to_le_bytes()[i] as i8) - 32;
+            s[12 + i] = (new_aux3.to_le_bytes()[i] as i8) - 32;
+        }
+
+        // Two 128-elem halves. hm is the full 32 bytes shared across both halves.
+        // m advances 1,2,4,8 per group within a half, then 16,32,64,128 for the
+        // next half — matching ggml-quants.c where m starts at 1 and increments
+        // 8 times across all 8 groups (4 per half).
+        let mut m = 1u8;
+        for half in 0..2 {
+            let q_half = &qs[half * 32..(half + 1) * 32];
+            for j in 0..4 {
+                let shift = (j * 2) as u8;
+                let sc_idx = half * 8 + j * 2;
+
+                let dl = d_all * s[sc_idx] as f32;
+                for l in 0..16 {
+                    let q_val = ((q_half[l] >> shift) & 3) as i8;
+                    let sign = if (hm[l] & m) != 0 { 0 } else { 4 };
+                    out[pos] = dl * (q_val - sign) as f32;
+                    pos += 1;
+                }
+
+                let dl = d_all * s[sc_idx + 1] as f32;
+                for l in 0..16 {
+                    let q_val = ((q_half[16 + l] >> shift) & 3) as i8;
+                    let sign = if (hm[16 + l] & m) != 0 { 0 } else { 4 };
+                    out[pos] = dl * (q_val - sign) as f32;
+                    pos += 1;
+                }
+
+                m <<= 1;
+            }
+        }
+    }
+    Ok(out)
+}
+
+// ---- Q4_K helper: decode scale/min from the 12-byte pack -------------------
+
+fn get_scale_min_k4(j: usize, q: &[u8]) -> (u8, u8) {
+    if j < 4 {
+        (q[j] & 63, q[j + 4] & 63)
+    } else {
+        (
+            (q[j + 4] & 0xF) | ((q[j - 4] >> 6) << 4),
+            (q[j + 4] >> 4) | ((q[j] >> 6) << 4),
+        )
+    }
+}
+
+// ---- Q4_K (256-elem block, 144 bytes) --------------------------------------
+
+fn q4_k(raw: &[u8], ne0: usize) -> io::Result<Vec<f32>> {
+    // 256-elem blocks, 144 B: 2B d, 2B dmin, 12B scales, 128B nibbles.
+    // Per 64-elem group g: 32 bytes; low nibbles -> first 32 outputs (scale 2g),
+    // high nibbles -> next 32 outputs (scale 2g+1).
+    let nblk = ne0 / 256;
+    let mut out = vec![0f32; ne0];
+    let mut pos = 0usize;
+    for b in 0..nblk {
+        let off = b * 144;
+        let d = f16_to_f32(u16::from_le_bytes(raw[off..off + 2].try_into().unwrap()));
+        let dmin = f16_to_f32(u16::from_le_bytes(
+            raw[off + 2..off + 4].try_into().unwrap(),
+        ));
+        let sc = &raw[off + 4..off + 16];
+        let qs = &raw[off + 16..off + 144];
+        for g in 0..4 {
+            let (s0, m0) = get_scale_min_k4(2 * g, sc);
+            let (s1, m1) = get_scale_min_k4(2 * g + 1, sc);
+            let (d1, m1f) = (d * s0 as f32, dmin * m0 as f32);
+            let (d2, m2f) = (d * s1 as f32, dmin * m1 as f32);
+            let q = &qs[g * 32..(g + 1) * 32];
+            for i in 0..32 {
+                out[pos + i] = d1 * (q[i] & 0xF) as f32 - m1f;
+                out[pos + 32 + i] = d2 * (q[i] >> 4) as f32 - m2f;
+            }
+            pos += 64;
+        }
+    }
+    Ok(out)
+}
+
+// ---- Q5_K (256-elem block, 176 bytes) --------------------------------------
+
+fn q5_k(raw: &[u8], ne0: usize) -> io::Result<Vec<f32>> {
+    // block_q5_K layout:
+    //   [0..2)    d       f16 super-block scale
+    //   [2..4)    dmin    f16 super-block scale for mins
+    //   [4..16)   scales  12B (same packing as Q4_K)
+    //   [16..18)  (padding / alignment - skipped, qh starts at 16)
+    //   [16..48)  qh      32B = QK_K/8 (high bit for each quant)
+    //   [48..176) qs      128B = QK_K/2 (low 4 bits)
+    //
+    // Wait — check size: 2+2+12+32+128 = 176. Correct.
+    // Each 64-elem group: 32 low-nibbles -> first 32, 32 high-nibbles next 32.
+    //   qh: 4 planes of 1 bit each. 4 planes * 64 = 256.
+    //   plane 0: bit 0 of qh[0..31] -> first 32 of group (u1)
+    //   plane 1: bit 1 of qh[0..31] -> last 32 of group (u2)
+    //   plane 2: bit 2 of qh[0..31] -> next group first
+    //   plane 3: bit 3 of qh[0..31] -> next group last
+    let nblk = ne0 / 256;
+    let mut out = vec![0f32; ne0];
+    let mut pos = 0usize;
+    for b in 0..nblk {
+        let off = b * 176;
+        let d = f16_to_f32(u16::from_le_bytes(raw[off..off + 2].try_into().unwrap()));
+        let dmin = f16_to_f32(u16::from_le_bytes(
+            raw[off + 2..off + 4].try_into().unwrap(),
+        ));
+        let sc = &raw[off + 4..off + 16];
+        let qh_bytes = &raw[off + 16..off + 48];
+        let ql = &raw[off + 48..off + 176];
+
+        for g in 0..4 {
+            let is0 = 2 * g;
+            let is1 = 2 * g + 1;
+            let (sc0, m0) = get_scale_min_k4(is0, sc);
+            let (sc1, m1) = get_scale_min_k4(is1, sc);
+            let d1 = d * sc0 as f32;
+            let m1f = dmin * m0 as f32;
+            let d2 = d * sc1 as f32;
+            let m2f = dmin * m1 as f32;
+
+            // qh is the same 32 bytes for all groups — only the bit masks change.
+            //   u1 = 1 << (g*2)   (bits 0,2,4,6 of each qh byte)
+            //   u2 = 2 << (g*2)   (bits 1,3,5,7 of each qh byte)
+            let u1 = 1u8 << (g * 2);
+            let u2 = 2u8 << (g * 2);
+
+            let qg = &ql[g * 32..(g + 1) * 32];
+            // first 32 elements: use ql low nibble + qh bit plane u1 (always qh[0..32))
+            for l in 0..32 {
+                let low = qg[l] & 0xF;
+                let high_bit = if (qh_bytes[l] & u1) != 0 { 16 } else { 0 };
+                out[pos] = d1 * (low + high_bit) as f32 - m1f;
+                pos += 1;
+            }
+            // second 32 elements: use ql high nibble + qh bit plane u2 (always qh[0..32))
+            for l in 0..32 {
+                let low = qg[l] >> 4;
+                let high_bit = if (qh_bytes[l] & u2) != 0 { 16 } else { 0 };
+                out[pos] = d2 * (low + high_bit) as f32 - m2f;
+                pos += 1;
+            }
+        }
+    }
+    Ok(out)
+}
+
+// ---- Q6_K (256-elem block, 210 bytes) --------------------------------------
+
+fn q6_k(raw: &[u8], ne0: usize) -> io::Result<Vec<f32>> {
+    // 256-elem blocks, 210 B = 2 superblocks of 128 elements.
+    // Layout: 128B ql | 64B qh | 16B scales (i8) | 2B d (f16).
+    // Per superblock s: ql[s*64..], qh[s*32..], scales[s*8..].
+    // ql nibble order: lo bytes 0..64, hi bytes 0..64; qh gives 4 2-bit
+    // planes (b&3, >>2&3, >>4&3, >>6&3). q = ql|(qh<<4) - 32, 8 groups of 16.
+    let nblk = ne0 / 256;
+    let mut out = vec![0f32; ne0];
+    let mut pos = 0usize;
+    for b in 0..nblk {
+        let off = b * 210;
+        let blk = &raw[off..off + 210];
+        let d = f16_to_f32(u16::from_le_bytes(blk[208..210].try_into().unwrap()));
+        for sb in 0..2 {
+            let ql = &blk[sb * 64..sb * 64 + 64];
+            let qh = &blk[128 + sb * 32..128 + sb * 32 + 32];
+            let mut ql_nib = [0u8; 128];
+            let mut qh_bits = [0u8; 128];
+            for i in 0..64 {
+                ql_nib[i] = ql[i] & 0xF;
+                ql_nib[64 + i] = ql[i] >> 4;
+            }
+            for i in 0..32 {
+                qh_bits[i] = qh[i] & 3;
+                qh_bits[32 + i] = (qh[i] >> 2) & 3;
+                qh_bits[64 + i] = (qh[i] >> 4) & 3;
+                qh_bits[96 + i] = (qh[i] >> 6) & 3;
+            }
+            for g in 0..8 {
+                let sc = blk[192 + sb * 8 + g] as i8 as f32;
+                let base = g * 16;
+                for i in 0..16 {
+                    let q =
+                        ((ql_nib[base + i] | (qh_bits[base + i] << 4)) as i8 as i32 - 32) as f32;
+                    out[pos + sb * 128 + base + i] = d * sc * q;
+                }
+            }
+        }
+        pos += 256;
+    }
+    Ok(out)
+}
+
+/// Read + dequantize `n_rows` consecutive rows starting at flat row `start`.
+/// `row_bytes` is the packed row size on disk. Reads at most ~one row-block
+/// at a time into a reusable buffer (RSS discipline: no full-tensor buffer).
+pub fn read_rows_streamed(
+    f: &mut std::fs::File,
+    base: u64,
+    dtype: u32,
+    ne0: usize,
+    start: usize,
+    n_rows: usize,
+    row_bytes: usize,
+    buf: &mut Vec<u8>,
+) -> io::Result<Vec<f32>> {
+    let (blk_size, blk_elems) =
+        type_layout(dtype).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "bad type"))?;
+    debug_assert_eq!(row_bytes, (ne0 / blk_elems) * blk_size);
+    let mut out = vec![0f32; ne0 * n_rows];
+
+    // stream in chunks of up to 256 KiB of packed rows
+    let chunk_rows = (262_144 / row_bytes).max(1);
+    let mut done = 0usize;
+    while done < n_rows {
+        let n = chunk_rows.min(n_rows - done);
+        let need = n * row_bytes;
+        buf.clear();
+        buf.resize(need, 0);
+        f.seek(SeekFrom::Start(
+            base + (start + done) as u64 * row_bytes as u64,
+        ))?;
+        f.read_exact(&mut buf[..need])?;
+        for r in 0..n {
+            let row = dequant_row(&buf[r * row_bytes..(r + 1) * row_bytes], dtype, ne0)?;
+            out[(done + r) * ne0..(done + r + 1) * ne0].copy_from_slice(&row);
+        }
+        done += n;
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Smoke test: dequant a single Q8_K block and verify shape + non-NaN
+    #[test]
+    fn dequant_q8_k_smoke() {
+        // One block: 292 bytes, 256 elems
+        let raw = vec![0u8; 292];
+        // d = f32(0), so all outputs should be 0
+        let out = q8_k(&raw, 256).unwrap();
+        assert_eq!(out.len(), 256);
+        assert!(out.iter().all(|v| *v == 0.0));
+    }
+
+    #[test]
+    fn dequant_q2_k_smoke() {
+        let raw = vec![0u8; 84];
+        let out = q2_k(&raw, 256).unwrap();
+        assert_eq!(out.len(), 256);
+        // d=0, dmin=0 -> all zeros
+        assert!(out.iter().all(|v| *v == 0.0));
+    }
+
+    #[test]
+    fn dequant_q3_k_smoke() {
+        let raw = vec![0u8; 110];
+        let out = q3_k(&raw, 256).unwrap();
+        assert_eq!(out.len(), 256);
+        assert!(out.iter().all(|v| *v == 0.0));
+    }
+
+    #[test]
+    fn dequant_q5_k_smoke() {
+        let raw = vec![0u8; 176];
+        let out = q5_k(&raw, 256).unwrap();
+        assert_eq!(out.len(), 256);
+        assert!(out.iter().all(|v| *v == 0.0));
+    }
+
+    #[test]
+    fn bf16_passthrough() {
+        // BF16 1.0 = bits 0x3F80 in lower 16, zero in upper 16
+        let raw = vec![0x80u8, 0x3F]; // BF16 of 1.0 as little-endian u16
+        let out = dequant_row(&raw, GGML_BF16, 1).unwrap();
+        assert_eq!(out.len(), 1);
+        assert!((out[0] - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn dequant_row_dispatch_q8_k() {
+        let raw = vec![0u8; 292];
+        let out = dequant_row(&raw, GGML_Q8_K, 256).unwrap();
+        assert_eq!(out.len(), 256);
+    }
+
+    #[test]
+    fn dequant_row_dispatch_q2_k() {
+        let raw = vec![0u8; 84];
+        let out = dequant_row(&raw, GGML_Q2_K, 256).unwrap();
+        assert_eq!(out.len(), 256);
+    }
+
+    #[test]
+    fn dequant_row_dispatch_q3_k() {
+        let raw = vec![0u8; 110];
+        let out = dequant_row(&raw, GGML_Q3_K, 256).unwrap();
+        assert_eq!(out.len(), 256);
+    }
+
+    #[test]
+    fn dequant_row_dispatch_q5_k() {
+        let raw = vec![0u8; 176];
+        let out = dequant_row(&raw, GGML_Q5_K, 256).unwrap();
+        assert_eq!(out.len(), 256);
+    }
+
+    #[test]
+    fn dequant_row_bf16() {
+        let raw = vec![0x80u8, 0x3F, 0x00u8, 0x40]; // 1.0, 2.0
+        let out = dequant_row(&raw, GGML_BF16, 2).unwrap();
+        assert_eq!(out.len(), 2);
+        assert!((out[0] - 1.0).abs() < 1e-6);
+        assert!((out[1] - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn dequant_q8_k_nonzero_d() {
+        // One block with d=1.0 (f32) and some qs values
+        let mut raw = vec![0u8; 292];
+        // Set d = 1.0f32 at offset 0
+        raw[0..4].copy_from_slice(&f32::to_le_bytes(1.0));
+        // Set qs[0] = 42, qs[1] = -3
+        raw[4] = 42u8;
+        raw[5] = (-3i8) as u8;
+        let out = q8_k(&raw, 256).unwrap();
+        assert_eq!(out[0], 42.0);
+        assert_eq!(out[1], -3.0);
+        assert_eq!(out[255], 0.0);
+    }
+}
