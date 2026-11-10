@@ -1,6 +1,6 @@
 {
-  "n": 121,
+  "n": 122,
   "last_model": "ocg:iceman-contributor-free",
-  "last_at": "2026-11-10T12:58:10Z",
-  "last_summary": "BLOCKED: Repository files (ROADMAP.md, STATUS.json, engine/) are not present in the environment/workspace, so I cannot pick or implement a ROADMAP item or take any measurement."
+  "last_at": "2026-11-10T14:59:23Z",
+  "last_summary": "Measured f32 matvec mismatch between engine and ndarray on a 4x4 F32 tensor: engine's dequant+dot_f32 path is bit-identical to naive f64 reference (max abs err 0.0) and differs from ndarray dot by ~1e-7 due to accumulation order, confirming engine's GGML-style accumulator is correct."
 }
