@@ -1,6 +1,6 @@
 {
-  "n": 117,
+  "n": 118,
   "last_model": "ocg:iceman-contributor-free",
-  "last_at": "2026-11-09T22:14:30Z",
-  "last_summary": null
+  "last_at": "2026-11-10T06:30:04Z",
+  "last_summary": "Blocked \u2014 the repository is not present in the workspace (no `ROADMAP.md`, `STATUS.json`, or `engine/` found); cannot pick or implement a ROADMAP item without access to the codebase."
 }
